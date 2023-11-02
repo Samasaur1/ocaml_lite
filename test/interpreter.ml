@@ -1,6 +1,5 @@
 open OUnit2
 open Ocaml_lite.Lexer
-open Ocaml_lite.Ast
 open Ocaml_lite.Parser
 open Ocaml_lite.Interpreter
 
