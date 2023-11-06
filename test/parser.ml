@@ -90,10 +90,22 @@ let parse_tests = "parser tests" >::: [
     (parse (tokenize "let square (x: int): int = x * x;;")));
   "type cross type" >::
   (fun _ -> assert_equal
-    (Program ([TypeDefBinding ("t", [("A", Some(TupleType (UnitType, StringType)))])]))
+    (Program ([TypeDefBinding ("t", [("A", Some(TupleType [UnitType; StringType;]))])]))
     (parse (tokenize "type t = | A of unit * string;;")));
   "type -> type" >::
   (fun _ -> assert_equal
     (Program ([TypeDefBinding ("t", [("A", Some(FunctionType (UserDeclaredType "f", UserDeclaredType "g")))])]))
     (parse (tokenize "type t = | A of f -> g;;")));
+  "type cross type cross type" >::
+  (fun _ -> assert_equal
+    (Program ([TypeDefBinding ("t", [("A", Some(TupleType [UnitType; StringType; BoolType;]))])]))
+    (parse (tokenize "type t = | A of unit * string * bool;;")));
+  "type cross (type cross type)" >::
+  (fun _ -> assert_equal
+    (Program ([TypeDefBinding ("t", [("A", Some(TupleType [UnitType; TupleType [StringType; BoolType;];]))])]))
+    (parse (tokenize "type t = | A of unit * (string * bool);;")));
+  "(type cross type) cross type" >::
+  (fun _ -> assert_equal
+    (Program ([TypeDefBinding ("t", [("A", Some(TupleType [TupleType [UnitType; StringType;]; BoolType;]))])]))
+    (parse (tokenize "type t = | A of (unit * string) * bool;;")));
 ]
