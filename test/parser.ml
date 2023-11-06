@@ -108,4 +108,22 @@ let parse_tests = "parser tests" >::: [
   (fun _ -> assert_equal
     (Program ([TypeDefBinding ("t", [("A", Some(TupleType [TupleType [UnitType; StringType;]; BoolType;]))])]))
     (parse (tokenize "type t = | A of (unit * string) * bool;;")));
+  "match with one variable case" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, MatchExpr (VarExpr "y", [MatchBranch ("z", None, IntLiteralExpr 0)]))]))
+    (parse (tokenize "let x = match y with | z => 0;;")));
+  "match without vertical bar" >::
+  (fun _ -> try
+    let _ = parse (tokenize "let x = match y with z => 0;;") in
+      assert_failure "parsed match branch without bar"
+    with
+    | ParseError _ -> assert_bool "" true
+    | _ -> assert_failure "Unexpected error");
+  "match with wrong arrow" >::
+  (fun _ -> try
+    let _ = parse (tokenize "let x = match y with | z -> 0;;") in
+      assert_failure "parsed match branch with wrong arrow"
+    with
+    | ParseError _ -> assert_bool "" true
+    | _ -> assert_failure "Unexpected error");
 ]

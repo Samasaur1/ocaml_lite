@@ -54,7 +54,8 @@ and typ =
   | UserDeclaredType of string
 
 and match_branch =
-  | MatchBranch of string * pattern_vars * expr
+  | MatchBranch of string * pattern_vars option * expr
+  (* If I want to support matching on literals, this needs to not be a string *)
 
 and pattern_vars =
   | SinglePatternVar of string

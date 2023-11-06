@@ -28,7 +28,7 @@ let interpreter_tests = "interpreter tests" >::: [
   (fun _ -> assert_equal
     (IntLiteral 4)
     (interpret (parse (tokenize "let y = let square x = x * x in square 2;;"))));
-  "fibonacci" >::
+  "fibonacci" >:: (* this will fail per the spec because you can't match on literals *)
   (fun _ -> assert_equal
     (IntLiteral 13)
     (interpret (parse (tokenize "let rec fib x = match x with | 0 => 1 | 1 => 1 | 2 => 1 | n => fib (n-1) (n-2);; let y = fib 7;;"))));
