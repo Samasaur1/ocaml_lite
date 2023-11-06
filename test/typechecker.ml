@@ -125,4 +125,18 @@ let typechecker_tests = "typechecker tests" >::: [
   with
     | TypecheckError _ -> assert_bool "" true
     | _ -> assert_failure "Unexpected error");
+  "match with all ints" >::
+  (fun _ -> assert_equal
+    (IntType)
+    (List.assoc "x"
+      (typecheck (parse (tokenize "type t = | A | B;; let x = (let z = A in match z with | A => 0 | B => 0);;")))
+    )
+  );
+  "match with int and bool" >::
+  (fun _ -> try
+    let env = typecheck (parse (tokenize "type t = | A | B;; let x = (let z = A in match z with | A => 0 | B => true);;")) in
+    assert_failure ("successfully typechecked heterogenous match statement as " ^ string_of_typ (List.assoc "x" env))
+  with
+    | TypecheckError _ -> assert_bool "" true
+    | _ -> assert_failure "Unexpected error");
 ]
