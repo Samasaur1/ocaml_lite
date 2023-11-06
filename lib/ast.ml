@@ -19,7 +19,7 @@ and expr =
   | TupleExpr of expr list (* must have two or more items *)
   | BinopExpr of expr * binop * expr
   | UnopExpr of unop * expr
-  (* | ParenExpr of expr (* i don't think i need a type constructor for this, just have the nested expr directly *) *)
+  (* | ParenExpr of expr (* unnecessary — the nested expr goes in the AST directly *) *)
   | IntLiteralExpr of int
   | BoolLiteralExpr of bool (* handles both true and false *)
   | StringLiteralExpr of string
@@ -45,8 +45,8 @@ and unop =
 
 and typ =
   | FunctionType of typ * typ
-  (* | ParenType of type (* again don't think i need a type constructor *) *)
-  | TupleType of typ * typ
+  (* | ParenType of type (* unnecessary — the nested typ goes in the AST directly *) *)
+  | TupleType of typ list (* must have two or more items *)
   | IntType
   | BoolType
   | StringType
@@ -63,8 +63,7 @@ and pattern_vars =
 let rec string_of_typ (t: typ): string =
   match t with
   | FunctionType (arg, out) -> "(" ^ string_of_typ arg ^ ") -> (" ^ string_of_typ out ^ ")"
-  (* | ParenType of type (* again don't think i need a type constructor *) *)
-  | TupleType (first, second) -> "(" ^ string_of_typ first ^ ") * (" ^ string_of_typ second ^ ")"
+  | TupleType lst -> List.map (function a -> "(" ^ string_of_typ a ^ ")") lst |> String.concat " * "
   | IntType -> "int"
   | BoolType -> "bool"
   | StringType -> "string"
