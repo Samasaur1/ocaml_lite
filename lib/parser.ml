@@ -135,7 +135,7 @@ and parse_match_branches (branches: match_branch list) (lst: token list): match_
       in
         let (pv, r2) = help [] r in
           (match r2 with
-          | DoubleArrow :: r3 -> let (e, rest) = parse_expr r2 in
+          | DoubleArrow :: r3 -> let (e, rest) = parse_expr r3 in
             parse_match_branches (MatchBranch (x, Some(MultiplePatternVars pv), e) :: branches) rest
           | x :: _ -> raise (ParseError ("Expected `=>`, got " ^ tok_to_str x))
           | [] -> raise (ParseError ("Expected `=>`, got end of input")))
@@ -148,21 +148,38 @@ and parse_match_branches (branches: match_branch list) (lst: token list): match_
   | [Pipe] -> raise (ParseError ("Expected match case, got end of input"))
   | _ -> (branches, lst)
 and parse_type (lst: token list): typ * token list =
-  match lst with
-    (* function *)
-  | LParen :: r -> let (t, r2) = parse_type r in
-    (match r2 with
-      | RParen :: rest -> (t, rest)
-      | x :: _ -> raise (ParseError ("Expected `)`, got " ^ tok_to_str x))
-      | [] -> raise (ParseError ("Expected `)`, got end of input")))
-  (* tupletypes *)
-  | TInt :: rest -> (IntType, rest)
-  | TBool :: rest -> (BoolType, rest)
-  | TString :: rest -> (StringType, rest)
-  | TUnit :: rest -> (UnitType, rest)
-  | Id x :: rest -> (UserDeclaredType x, rest)
-  | x :: _ -> raise (ParseError ("Expected type, got " ^ tok_to_str x))
-  | [] -> raise (ParseError ("Expected type, got end of input"))
+  let rec parse_function_type (toks: token list): typ * token list =
+    let rec help ex = function
+      | Arrow :: r ->
+        let (e, rest) = parse_tuple_type r in
+        help (FunctionType (ex, e)) rest
+      | ts -> (ex, ts) in
+    let (e, r) = parse_tuple_type toks  in
+    help e r
+  and parse_tuple_type (toks: token list): typ * token list =
+    let rec help ex = function
+      | Times :: r ->
+        let (e, rest) = parse_tuple_type r in
+        help (FunctionType (ex, e)) rest
+      | ts -> (ex, ts) in
+    let (e, r) = parse_base_type toks  in
+    help e r
+  and parse_base_type (toks: token list): typ * token list =
+    match toks with
+    | LParen :: r -> let (t, r2) = parse_function_type r in
+      (match r2 with
+        | RParen :: rest -> (t, rest)
+        | x :: _ -> raise (ParseError ("Expected `)`, got " ^ tok_to_str x))
+        | [] -> raise (ParseError ("Expected `)`, got end of input")))
+    | TInt :: rest -> (IntType, rest)
+    | TBool :: rest -> (BoolType, rest)
+    | TString :: rest -> (StringType, rest)
+    | TUnit :: rest -> (UnitType, rest)
+    | Id x :: rest -> (UserDeclaredType x, rest)
+    | x :: _ -> raise (ParseError ("Expected type, got " ^ tok_to_str x))
+    | [] -> raise (ParseError ("Expected type, got end of input"))
+  in
+    parse_function_type lst
 
 let parse (lst: token list): program =
   match lst with
