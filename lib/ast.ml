@@ -61,6 +61,11 @@ and pattern_vars =
   | SinglePatternVar of string
   | MultiplePatternVars of string list
 
+let repeat n s = 
+  let rec helper s1 n1 = 
+    if n1 = 0 then s1 else helper (s1 ^ s) (n1 - 1)
+  in helper "" n
+
 let rec string_of_typ (t: typ): string =
   match t with
   | FunctionType (arg, out) -> "(" ^ string_of_typ arg ^ ") -> (" ^ string_of_typ out ^ ")"
@@ -70,6 +75,39 @@ let rec string_of_typ (t: typ): string =
   | StringType -> "string"
   | UnitType -> "unit"
   | UserDeclaredType x -> x
+
+let rec string_of_program (indent: int) (p: program): string =
+  match p with
+  | Program bds -> "Program [\n" ^ ((List.map (string_of_binding 1) bds) |> (String.concat ",\n")) ^ "\n]"
+and string_of_binding (indent: int) (bd: binding): string =
+  match bd with
+  | NonRecursiveBinding (name, params, ty, value) ->
+      (repeat indent " ") ^ "let " ^ name ^ " " ^ ((List.map string_of_param params) |> (String.concat " ")) ^ " = " ^ string_of_expr value ^ ";;"
+  | RecursiveBinding (name, params, ty, value) -> "f"
+  | TypeDefBinding (name, constructors) -> "f"
+and string_of_param (p: param): string =
+  match p with
+  | UntypedParam x -> x
+  | TypedParam (x, t) -> "(" ^ x ^ ": " ^ string_of_typ t ^ ")"
+and string_of_expr (e: expr): string =
+  match e with
+  | LetExpr (name', params', type', value', in') -> "letexpr"
+  | LetRecExpr (name', params', type', value', in') -> "letexpr"
+  | IfExpr (c, t, f) -> "if " ^ string_of_expr c ^ " then " ^ string_of_expr t ^ " else " ^ string_of_expr f
+  | FunDefExpr (params, ty, body) -> "fundefexpr"
+  | FunAppExpr (fn, arg) -> string_of_expr fn ^ " " ^ string_of_expr arg
+  | TupleExpr (members) -> "typleexpr"
+  | BinopExpr (l, op, r) -> "binopexpr"
+  | UnopExpr (op, e) -> "unopexpr"
+  | IntLiteralExpr i -> string_of_int i
+  | BoolLiteralExpr b -> string_of_bool b
+  | StringLiteralExpr s -> "\"" ^ s ^ "\""
+  | VarExpr v -> v
+  | UnitExpr -> "()"
+  | MatchExpr (e, branches) -> "match " ^ string_of_expr e ^ " with " ^ ((List.map string_of_branch branches) |> (String.concat " "))
+and string_of_branch (b: match_branch): string = 
+  match b with
+    | MatchBranch (first, vars, value) -> "| " ^ first ^ " " ^ "vars" ^ " => " ^ string_of_expr value
 
 (*
 The binary operators are all left-associative (except for < and =, which are non-associative) and all operators have their normal precedences:

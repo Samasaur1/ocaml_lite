@@ -7,7 +7,8 @@ let parse_tests = "parser tests" >::: [
   "basic single binding" >::
   (fun _ -> assert_equal
     (Program ([NonRecursiveBinding ("x", [], None, IntLiteralExpr (1))]))
-    (parse (tokenize "let x = 1;;")));
+    (parse (tokenize "let x = 1;;"))
+  ~printer:(string_of_program 0));
   "two bindings" >::
   (fun _ -> assert_equal
     (Program ([NonRecursiveBinding ("x", [], None, IntLiteralExpr (1)); NonRecursiveBinding ("y", [], None, IntLiteralExpr (2))]))
@@ -126,4 +127,14 @@ let parse_tests = "parser tests" >::: [
     with
     | ParseError _ -> assert_bool "" true
     | _ -> assert_failure "Unexpected error");
+  "match with two variable cases" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, MatchExpr (VarExpr "y", [MatchBranch ("z", None, IntLiteralExpr 0); MatchBranch ("a", None, IntLiteralExpr 1)]))]))
+    (parse (tokenize "let x = match y with | z => 0 | a => 1;;"))
+  ~printer:(string_of_program 0));
+  "match with one case with multiple pattern vars" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, MatchExpr (VarExpr "y", [MatchBranch ("z", Some(MultiplePatternVars ["a"; "b";]), IntLiteralExpr 0)]))]))
+    (parse (tokenize "let x = match y with | z (a, b) => 0;;"))
+  ~printer:(string_of_program 0));
 ]
