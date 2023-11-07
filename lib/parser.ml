@@ -4,24 +4,6 @@ open Lexer
 exception ParseError of string
 
 let rec parse_program (lst: token list): program * token list = 
-  (* (* (* let rec help l = *) *) *)
-  (* (* (*   let (b, r) = parse_binding l in *) *) *)
-  (* (* (*   match r with *) *) *)
-  (* (* (*   | DoubleSemicolon :: rest -> (b, rest) *) *) *)
-  (* (* (*   | x :: _ -> raise ParseError ("Expected `;;`, got " ^ tok_to_str x) *) *) *)
-  (* (* (*   | [] -> raise ParseError ("Expected `;;`, got end of input") *) *) *)
-  (* (* (* in help lst *) *) *)
-  (* (* let rec help (reduceresult: binding list) (toks: token list): binding list * token list = *) *)
-  (* (*   let (b, r) = parse_binding toks in *) *)
-  (* (*   match r with *) *)
-  (* (*   | [DoubleSemicolon] -> ([b], []) *) *)
-  (* (*   | DoubleSemicolon :: rest -> ([], []) *) *)
-  (* (*   | [] -> raise ParseError "Expected `;;`, got end of input" *) *)
-  (* (* in *) *)
-  (* (*   let (bds, rest) = help [] lst in *) *)
-  (* (*     (Program bds, rest) *) *)
-  (* let (b, r) = parse_binding lst in *)
-  (*   (Program [b], r) *)
   let rec help (rr: binding list) (toks: token list): binding list * token list =
     match toks with
     | [] -> (rr, toks)
@@ -98,7 +80,7 @@ and parse_type_binding (lst: token list): binding * token list =
         | [] -> raise (ParseError ("Expected `|`, got end of input"))
       in
         let (brs, rest) = help [] r in
-          (TypeDefBinding (x, brs), rest)
+          (TypeDefBinding (x, List.rev brs), rest)
   )
   | Type :: Id _ :: x :: _ -> raise (ParseError ("Expected `=`, got " ^ tok_to_str x))
   | Type :: x :: _ -> raise (ParseError ("Expected type name, got " ^ tok_to_str x))
@@ -132,7 +114,7 @@ and parse_expr (lst: token list): expr * token list =
     | Match :: r -> let (e, r2) = parse_expr r in
       (match r2 with
         | With :: r3 -> let (brs, rest) = parse_match_branches [] r3 in
-          (MatchExpr (e, brs), rest)
+          (MatchExpr (e, List.rev brs), rest)
         | x :: _ -> raise (ParseError ("Expected `with`, got " ^ tok_to_str x))
         | [] -> raise (ParseError ("Expected `with`, got end of input")))
     | x :: _ -> raise (ParseError ("Expected expr, got " ^ tok_to_str x))
@@ -183,8 +165,10 @@ and parse_type (lst: token list): typ * token list =
   | [] -> raise (ParseError ("Expected type, got end of input"))
 
 let parse (lst: token list): program =
-  let (prog, rest) = parse_program lst in
-  match rest with
-  (* | [DoubleSemicolon] -> prog (* this allows the last binding to not have `;;` *) *)
-  | [] -> prog
-  | x :: _ -> raise (ParseError ("Expected end of file, got " ^ tok_to_str x))
+  match lst with
+  | [] -> raise (ParseError ("Cannot parse an empty program"))
+  | _ ->
+    let (prog, rest) = parse_program lst in
+      match rest with
+      | [] -> prog
+      | x :: _ -> raise (ParseError ("Expected end of file, got " ^ tok_to_str x))

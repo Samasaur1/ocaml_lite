@@ -83,8 +83,10 @@ and string_of_binding (indent: int) (bd: binding): string =
   match bd with
   | NonRecursiveBinding (name, params, ty, value) ->
       (repeat indent " ") ^ "let " ^ name ^ " " ^ ((List.map string_of_param params) |> (String.concat " ")) ^ " = " ^ string_of_expr value ^ ";;"
-  | RecursiveBinding (name, params, ty, value) -> "f"
-  | TypeDefBinding (name, constructors) -> "f"
+  | RecursiveBinding (name, params, ty, value) ->
+      (repeat indent " ") ^ "let rec " ^ name ^ " " ^ ((List.map string_of_param params) |> (String.concat " ")) ^ " = " ^ string_of_expr value ^ ";;"
+  | TypeDefBinding (name, constructors) ->
+      (repeat indent " ") ^ "type " ^ name ^ " = " ^ ((List.map (function | (s, None) -> "| " ^ s | (s, Some t) -> "| " ^ s ^ " of " ^ string_of_typ t) constructors) |> (String.concat " ")) ^ ";;"
 and string_of_param (p: param): string =
   match p with
   | UntypedParam x -> x
