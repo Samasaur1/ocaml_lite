@@ -241,6 +241,11 @@ let parse_tests = "parser tests" >::: [
     (Program ([RecursiveBinding ("x", [], None, IntLiteralExpr (1))]))
     (parse (tokenize "let rec x = 1;;"))
   ~printer:(string_of_program 0));
+  "let binding with multiple params" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [UntypedParam "a"; UntypedParam "b"; UntypedParam "c"], None, IntLiteralExpr (1))]))
+    (parse (tokenize "let x a b c = 1;;"))
+  ~printer:(string_of_program 0));
 
   (* "example test" >::
   (fun _ -> assert_equal

@@ -24,22 +24,21 @@ and parse_binding (lst: token list): binding * token list =
   | Type :: _ -> parse_type_binding lst
   | x :: _ -> raise (ParseError ("Expected binding, got " ^ tok_to_str x))
   | [] -> failwith "There must be at least one binding"
+and parse_param_list (lst: token list): param list * token list =
+  match lst with
+  | Id p :: r -> let (subsequent, r2) = parse_param_list r in
+    (UntypedParam p :: subsequent, r2)
+  | LParen :: Id p :: Colon :: r ->
+    let (t, r2) = parse_type r in
+    (match r2 with
+      | RParen :: r3 -> let (subsequent, rest) = parse_param_list r3 in
+        (TypedParam (p, t) :: subsequent, rest)
+      | x :: _ -> raise (ParseError ("Expected closing paren, got " ^ tok_to_str x))
+      | [] -> raise (ParseError ("Expected closing paren, got end of input"))
+    )
+  | _ -> ([], lst)
 and parse_let_binding_common (r: token list): param list * typ option * expr * token list =
-  let rec help (rr: param list) (toks: token list): param list * token list =
-    match toks with
-    | Colon :: _ | Eq :: _ -> (rr, toks)
-    | Id p :: r2 -> help ((UntypedParam p) :: rr) r2
-    (* | Id p :: r2 -> ((UntypedParam p) :: rr, r2) *)
-    | LParen :: Id p :: Colon :: r2 ->
-      let (t, r3) = parse_type r2 in
-        (match r3 with
-        | RParen :: r4 -> help (TypedParam (p, t) :: rr) r4
-        | x :: _ -> raise (ParseError ("Expected closing paren, got " ^ tok_to_str x))
-        | [] -> raise (ParseError ("Expected closing paren, got end of input")))
-    | x :: _ -> raise (ParseError ("Expected param, got " ^ tok_to_str x))
-    | [] -> raise (ParseError ("Expected param, got end of input"))
-  in
-    let (params, r2) = help [] r in
+    let (params, r2) = parse_param_list r in
       match r2 with
       | Colon :: r3 ->
         let (t, r4) = parse_type r3 in
@@ -240,8 +239,21 @@ and parse_expr (lst: token list): expr * token list =
             | [] -> raise (ParseError ("Expected `else`, got end of input")))
         | x :: _ -> raise (ParseError ("Expected `then`, got " ^ tok_to_str x))
         | [] -> raise (ParseError ("Expected `then`, got end of input")))
-(*   | Fun :: _ -> failwith "stub" *)
-(*   (* applicaiton *) *)
+    | Fun :: r -> let (params, r2) = parse_param_list r in
+      (match r2 with
+        | DoubleArrow :: r3 -> let (body, rest) = parse_expr r3 in
+          (FunDefExpr (params, None, body), rest)
+        | Colon :: r3 -> let (t, r4) = parse_type r3 in
+          (match r4 with
+            | DoubleArrow :: r5 -> let (body, rest) = parse_expr r5 in
+              (FunDefExpr (params, Some (t), body), rest)
+            | x :: _ -> raise (ParseError ("Expected `=>`, got " ^ tok_to_str x))
+            | [] -> raise (ParseError ("Expected `=>`, got end of input"))
+          )
+        | x :: _ -> raise (ParseError ("Expected `:` or `=>`, got " ^ tok_to_str x))
+        | [] -> raise (ParseError ("Expected `:` or `=>`, got end of input"))
+      )
+    (* TODO: function application *)
     | LParen :: RParen :: rest -> (UnitExpr, rest)
     | LParen :: r -> let (e, r2) = parse_expr_toplevel r in
       (match r2 with
