@@ -246,10 +246,37 @@ let parse_tests = "parser tests" >::: [
     (Program ([NonRecursiveBinding ("x", [UntypedParam "a"; UntypedParam "b"; UntypedParam "c"], None, IntLiteralExpr (1))]))
     (parse (tokenize "let x a b c = 1;;"))
   ~printer:(string_of_program 0));
+  "function literal associativity" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("a", [], None, FunDefExpr ([UntypedParam "x"], None, FunAppExpr (VarExpr "y", VarExpr "z")))]))
+    (parse (tokenize "let a = fun x => y z;;"))
+  ~printer:(string_of_program 0));
+  "function application associativity" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, FunAppExpr (FunAppExpr (VarExpr "a", VarExpr "b"), VarExpr "c"))]))
+    (parse (tokenize "let x = a b c;;"))
+  ~printer:(string_of_program 0));
+  "function application associativity (parens)" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, FunAppExpr (FunAppExpr (VarExpr "a", VarExpr "b"), VarExpr "c"))]))
+    (parse (tokenize "let x = (a b) c;;"))
+  ~printer:(string_of_program 0));
+  "overriding function application associativity" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, FunAppExpr (VarExpr "a", FunAppExpr (VarExpr "b", VarExpr "c")))]))
+    (parse (tokenize "let x = a (b c);;"))
+  ~printer:(string_of_program 0));
+  "fail on parse error in second expr in function application" >::
+  (fun _ -> try
+    let _ = parse (tokenize "let x = a |;;") in
+      assert_failure "did not notify of error and simply ignored rest of program"
+    with
+    | ParseError _ -> assert_bool "" true
+    | _ -> assert_failure "Unexpected error");
 
   (* "example test" >::
   (fun _ -> assert_equal
     (Program ([]))
-    (parse (tokenism "Example program"))
+    (parse (tokenize "Example program"))
   ~printer:(string_of_program 0)); *)
 ]

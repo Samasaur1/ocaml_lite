@@ -96,11 +96,11 @@ and string_of_expr (e: expr): string =
   | LetExpr (name', params', type', value', in') -> "letexpr"
   | LetRecExpr (name', params', type', value', in') -> "letexpr"
   | IfExpr (c, t, f) -> "if " ^ string_of_expr c ^ " then " ^ string_of_expr t ^ " else " ^ string_of_expr f
-  | FunDefExpr (params, ty, body) -> "fundefexpr"
-  | FunAppExpr (fn, arg) -> string_of_expr fn ^ " " ^ string_of_expr arg
-  | TupleExpr (members) -> "typleexpr"
-  | BinopExpr (l, op, r) -> "binopexpr"
-  | UnopExpr (op, e) -> "unopexpr"
+  | FunDefExpr (params, ty, body) -> "fun " ^ (List.map string_of_param params |> String.concat ", ") ^ ": type => " ^ string_of_expr body
+  | FunAppExpr (fn, arg) -> "(" ^ string_of_expr fn ^ ") (" ^ string_of_expr arg ^ ")"
+  | TupleExpr (members) -> "(" ^ (List.map string_of_expr members |> String.concat ", ") ^ ")"
+  | BinopExpr (l, op, r) -> "(" ^ string_of_expr l ^ ") op (" ^ string_of_expr r ^ ")"
+  | UnopExpr (op, e) -> "op (" ^ string_of_expr e ^ ")"
   | IntLiteralExpr i -> string_of_int i
   | BoolLiteralExpr b -> string_of_bool b
   | StringLiteralExpr s -> "\"" ^ s ^ "\""

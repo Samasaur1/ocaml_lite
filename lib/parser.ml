@@ -10,8 +10,8 @@ let rec parse_program (lst: token list): program * token list =
     | _ -> let (b, r) = parse_binding toks in
       match r with
       | DoubleSemicolon :: r2 -> help (b :: rr) r2
-      | x :: _ -> raise (ParseError ("Expected `;;`, got " ^ tok_to_str x ^ "(" ^ (List.map tok_to_str r |> String.concat " ") ^ ")"))
-      | [] -> raise (ParseError ("Expected `;;`, got end of input"))
+      | x :: _ -> raise (ParseError ("Expected `;;`, got " ^ tok_to_str x ^ " (`" ^ (List.map tok_to_str r |> String.concat " ") ^ "`)"))
+      | [] -> raise (ParseError ("Expected `;;`, got end of input (prog: " ^ (string_of_program 0 (Program (List.rev (b :: rr))))))
   in
     let (bds, rest) = help [] lst in
       (Program (List.rev bds), rest)
@@ -102,7 +102,22 @@ not
   *)
 and parse_expr (lst: token list): expr * token list =
   let rec parse_expr_toplevel (s: token list): expr * token list =
-    parse_expr_binops s
+    let rec help (rr: expr) (toks: token list): expr * token list =
+      try
+        let (base', r) = parse_expr_binops toks in
+        help (FunAppExpr (rr, base')) r
+      with
+        ParseError _ -> (rr, toks)
+    in
+    let (base, rest) = parse_expr_binops s in
+    help base rest
+  (*   let (e1, r) = parse_expr_binops s in *)
+  (*   try *)
+  (*     let (e2, r2) = parse_expr_binops r in *)
+  (*     (FunAppExpr (e1, e2), r2) *)
+  (*   with *)
+  (*     | ParseError _ -> (e1, r) *)
+  (* (* parse_expr_binops s *) *)
   and parse_expr_binops (s: token list): expr * token list =
     let rec help ex = function
       | Or :: r ->
@@ -253,7 +268,6 @@ and parse_expr (lst: token list): expr * token list =
         | x :: _ -> raise (ParseError ("Expected `:` or `=>`, got " ^ tok_to_str x))
         | [] -> raise (ParseError ("Expected `:` or `=>`, got end of input"))
       )
-    (* TODO: function application *)
     | LParen :: RParen :: rest -> (UnitExpr, rest)
     | LParen :: r -> let (e, r2) = parse_expr_toplevel r in
       (match r2 with
