@@ -182,12 +182,12 @@ let test_simple_let_in _ =
   assert_equal
     (parse (tokenize "let a = let b = c in d ;;"))
     [
-      NonRecursiveBinding ("a", [], None, LetIn (false, "b", [], None, VarExpr "c", VarExpr "d"));
+      NonRecursiveBinding ("a", [], None, LetExpr ("b", [], None, VarExpr "c", VarExpr "d"));
     ];
   assert_equal
     (parse (tokenize "let a = let rec b = c in d ;;"))
     [
-      NonRecursiveBinding ("a", [], None, LetIn (true, "b", [], None, VarExpr "c", VarExpr "d"));
+      NonRecursiveBinding ("a", [], None, LetRecExpr ("b", [], None, VarExpr "c", VarExpr "d"));
     ]
 
 let test_typed_let_in_val _ =
@@ -195,13 +195,13 @@ let test_typed_let_in_val _ =
     (parse (tokenize "let a = let b : unit = () in c ;;"))
     [
       Let
-        (false, "a", [], None, LetIn (false, "b", [], Some UnitType, UnitExpr, VarExpr "c"));
+        (false, "a", [], None, LetExpr ("b", [], Some UnitType, UnitExpr, VarExpr "c"));
     ];
   assert_equal
     (parse (tokenize "let a = let rec b : unit = () in c ;;"))
     [
       Let
-        (false, "a", [], None, LetIn (true, "b", [], Some UnitType, UnitExpr, VarExpr "c"));
+        (false, "a", [], None, LetRecExpr ("b", [], Some UnitType, UnitExpr, VarExpr "c"));
     ]
 
 let test_let_in_untyped_param _ =
@@ -212,7 +212,7 @@ let test_let_in_untyped_param _ =
         ( "a",
           [],
           None,
-          LetIn (false, "b", [ UntypedParam "c" ], None, UnitExpr, VarExpr "d") );
+          LetExpr ("b", [ UntypedParam "c" ], None, UnitExpr, VarExpr "d") );
     ];
   assert_equal
     (parse (tokenize "let a = let rec b c = () in d ;;"))
@@ -221,7 +221,7 @@ let test_let_in_untyped_param _ =
         ( "a",
           [],
           None,
-          LetIn (true, "b", [ UntypedParam "c" ], None, UnitExpr, VarExpr "d") );
+          LetRecExpr ("b", [ UntypedParam "c" ], None, UnitExpr, VarExpr "d") );
     ]
 
 let test_let_in_typed_param _ =
@@ -232,7 +232,7 @@ let test_let_in_typed_param _ =
         ( "a",
           [],
           None,
-          LetIn (false, "b", [ TypedParam ("c", IntType) ], None, UnitExpr, VarExpr "d") );
+          LetExpr ("b", [ TypedParam ("c", IntType) ], None, UnitExpr, VarExpr "d") );
     ];
   assert_equal
     (parse (tokenize "let a = let rec b (c : int) = () in d ;;"))
@@ -241,7 +241,7 @@ let test_let_in_typed_param _ =
         ( "a",
           [],
           None,
-          LetIn (true, "b", [ TypedParam ("c", IntType) ], None, UnitExpr, VarExpr "d") );
+          LetRecExpr ("b", [ TypedParam ("c", IntType) ], None, UnitExpr, VarExpr "d") );
     ]
 
 let test_let_in_unty_params _ =
@@ -252,7 +252,7 @@ let test_let_in_unty_params _ =
         ( "a",
           [],
           None,
-          LetIn (false, "b", [ UntypedParam "c"; UntypedParam "d" ], None, UnitExpr, VarExpr "e")
+          LetExpr ("b", [ UntypedParam "c"; UntypedParam "d" ], None, UnitExpr, VarExpr "e")
         );
     ];
   assert_equal
@@ -262,7 +262,7 @@ let test_let_in_unty_params _ =
         ( "a",
           [],
           None,
-          LetIn (true, "b", [ UntypedParam "c"; UntypedParam "d" ], None, UnitExpr, VarExpr "e")
+          LetRecExpr ("b", [ UntypedParam "c"; UntypedParam "d" ], None, UnitExpr, VarExpr "e")
         );
     ]
 
@@ -404,7 +404,7 @@ let test_nested_let_in_param _ =
               "b",
               [],
               None,
-              LetIn (true, "c", [], None, UnitExpr, VarExpr "d"),
+              LetRecExpr ("c", [], None, UnitExpr, VarExpr "d"),
               VarExpr "e" ) );
     ]
 
@@ -422,7 +422,7 @@ let test_nested_let_in_value _ =
               [],
               None,
               UnitExpr,
-              LetIn (false, "c", [], None, UnitExpr, VarExpr "d") ) );
+              LetExpr ("c", [], None, UnitExpr, VarExpr "d") ) );
     ]
 
 let test_simple_cond _ =
@@ -640,7 +640,7 @@ let test_nested_tuple _ =
         ( "a",
           [],
           None,
-          Tuple
+          TupleExpr
             [
               TupleExpr[ VarExpr "b"; VarExpr "c" ];
               VarExpr "d";
@@ -663,10 +663,10 @@ let test_let_in_tuple _ =
         ( "a",
           [],
           None,
-          Tuple
+          TupleExpr
             [
-              LetIn (false, "b", [], None, UnitExpr, VarExpr "c");
-              LetIn (true, "d", [], None, UnitExpr, VarExpr "f");
+              LetExpr ("b", [], None, UnitExpr, VarExpr "c");
+              LetRecExpr ("d", [], None, UnitExpr, VarExpr "f");
             ] );
     ]
 
@@ -678,7 +678,7 @@ let test_lambda_tuple _ =
         ( "a",
           [],
           None,
-          Tuple
+          TupleExpr
             [
               FunDefExpr ([ UntypedParam "x" ], None, UnitExpr);
               FunDefExpr ([ UntypedParam "y" ], None, VarExpr "y");
