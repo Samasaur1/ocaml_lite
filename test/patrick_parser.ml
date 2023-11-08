@@ -277,7 +277,7 @@ let test_let_in_ty_params _ =
           None,
           LetExpr
             ( "b",
-              [ TypedParam ("c", IntType); ("d", Some (FunctionType (StringType, BoolType))) ],
+              [ TypedParam ("c", IntType); TypedParam ("d", FunctionType (StringType, BoolType)) ],
               None,
               UnitExpr,
               VarExpr "e" ) );
@@ -292,7 +292,7 @@ let test_let_in_ty_params _ =
           None,
           LetRecExpr
             ( "b",
-              [ TypedParam ("c", IntType); ("d", Some (FunctionType (StringType, BoolType))) ],
+              [ TypedParam ("c", IntType); TypedParam ("d", FunctionType (StringType, BoolType)) ],
               None,
               UnitExpr,
               VarExpr "e" ) );
@@ -313,7 +313,7 @@ let test_let_in_complex_params _ =
                 TypedParam ("c", StringType);
                 UntypedParam "d";
                 UntypedParam "e";
-                ("f", Some (TupleType [ UnitType; BoolType ]));
+                TypedParam ("f", TupleType [ UnitType; BoolType ]);
               ],
               None,
               UnitExpr,
@@ -334,7 +334,7 @@ let test_let_in_complex_params _ =
                 TypedParam ("c", StringType);
                 UntypedParam "d";
                 UntypedParam "e";
-                ("f", Some (TupleType [ UnitType; BoolType ]));
+                TypedParam ("f", TupleType [ UnitType; BoolType ]);
               ],
               None,
               UnitExpr,
@@ -354,9 +354,9 @@ let test_let_in_complex _ =
           LetExpr
             ( "b",
               [
-                ("c", Some (TupleType [ IntType; BoolType ]));
+                TypedParam ("c", TupleType [ IntType; BoolType ]);
                 UntypedParam "d";
-                ("e", Some (FunctionType (UnitType, UnitType)));
+                TypedParam ("e", FunctionType (UnitType, UnitType));
                 UntypedParam "f";
               ],
               Some StringType,
@@ -375,9 +375,9 @@ let test_let_in_complex _ =
           LetRecExpr
             ( "b",
               [
-                ("c", Some (TupleType [ IntType; BoolType ]));
+                TypedParam ("c", TupleType [ IntType; BoolType ]);
                 UntypedParam "d";
-                ("e", Some (FunctionType (UnitType, UnitType)));
+                TypedParam ("e", FunctionType (UnitType, UnitType));
                 UntypedParam "f";
               ],
               Some StringType,
@@ -510,8 +510,8 @@ let test_lambda_ty_params _ =
         ( "a",
           [],
           None,
-          Lambda
-            ( [ ("x", Some (FunctionType (IntType, StringType))); TypedParam ("y", BoolType) ],
+          FunDefExpr
+            ( [ TypedParam ("x", FunctionType (IntType, StringType)); TypedParam ("y", BoolType) ],
               None,
               UnitExpr ) );
     ]
@@ -524,7 +524,7 @@ let test_lambda_complex_params _ =
         ( "a",
           [],
           None,
-          Lambda
+          FunDefExpr
             ( [
                 TypedParam ("w", IntType);
                 UntypedParam "x";
@@ -545,7 +545,7 @@ let test_lambda_complex _ =
         ( "a",
           [],
           None,
-          Lambda
+          FunDefExpr
             ( [
                 UntypedParam "w";
                 UntypedParam "x";
