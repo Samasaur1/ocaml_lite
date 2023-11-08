@@ -35,7 +35,7 @@ and binop =
   | Modulo
   | LessThan
   | Equal
-  | Exp
+  | Concat
   | And
   | Or
 
@@ -109,7 +109,9 @@ and string_of_expr (e: expr): string =
   | MatchExpr (e, branches) -> "match " ^ string_of_expr e ^ " with " ^ ((List.map string_of_branch branches) |> (String.concat " "))
 and string_of_branch (b: match_branch): string = 
   match b with
-    | MatchBranch (first, vars, value) -> "| " ^ first ^ " " ^ "vars" ^ " => " ^ string_of_expr value
+    | MatchBranch (first, None, value) -> "| " ^ first ^ " => " ^ string_of_expr value
+    | MatchBranch (first, Some (SinglePatternVar s), value) -> "| " ^ first ^ " " ^ s ^ " => " ^ string_of_expr value
+  | MatchBranch (first, Some (MultiplePatternVars ss), value) -> "| " ^ first ^ " (" ^ (String.concat ", " ss) ^ ") => " ^ string_of_expr value
 
 (*
 The binary operators are all left-associative (except for < and =, which are non-associative) and all operators have their normal precedences:

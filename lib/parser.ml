@@ -10,7 +10,7 @@ let rec parse_program (lst: token list): program * token list =
     | _ -> let (b, r) = parse_binding toks in
       match r with
       | DoubleSemicolon :: r2 -> help (b :: rr) r2
-      | x :: _ -> raise (ParseError ("Expected `;;`, got " ^ tok_to_str x))
+      | x :: _ -> raise (ParseError ("Expected `;;`, got " ^ tok_to_str x ^ "(" ^ (List.map tok_to_str r |> String.concat " ") ^ ")"))
       | [] -> raise (ParseError ("Expected `;;`, got end of input"))
   in
     let (bds, rest) = help [] lst in
@@ -85,33 +85,149 @@ and parse_type_binding (lst: token list): binding * token list =
   | Type :: Id _ :: x :: _ -> raise (ParseError ("Expected `=`, got " ^ tok_to_str x))
   | Type :: x :: _ -> raise (ParseError ("Expected type name, got " ^ tok_to_str x))
   | _ -> failwith "Unreachable"
+(*
+The binary operators are all left-associative (except for < and =, which are non-associative) and all operators have their normal precedences:
+
+(Highest precedence)
+not
+~
+*, /, mod
++, -, ^
+<, =
+&&
+||
+(Lowest precedence)
+
+  *)
 and parse_expr (lst: token list): expr * token list =
-  match lst with
-    | Let :: _ -> failwith "stub"
-    | If :: r -> let (c, r2) = parse_expr r in
-      (match r2 with
-        | Then :: r3 -> let (t, r4) = parse_expr r3 in
-          (match r4 with
-            | Else :: r5 -> let (f, rest) = parse_expr r5 in
-              (IfExpr (c, t, f), rest)
-            | x :: _ -> raise (ParseError ("Expected `else`, got " ^ tok_to_str x))
-            | [] -> raise (ParseError ("Expected `else`, got end of input")))
-        | x :: _ -> raise (ParseError ("Expected `then`, got " ^ tok_to_str x))
-        | [] -> raise (ParseError ("Expected `then`, got end of input")))
-    | Fun :: _ -> failwith "stub"
-    (* applicaiton *)
-    (* tuples *)
-    (* binops *)
-    | Not :: r -> let (e, rest) = parse_expr r in (UnopExpr (Not, e), rest)
-    | Negate :: r -> let (e, rest) = parse_expr r in (UnopExpr (Negate, e), rest)
+  let rec parse_expr_toplevel (s: token list): expr * token list =
+    parse_expr_binops s
+  and parse_expr_binops (s: token list): expr * token list =
+    let rec help ex = function
+      | Or :: r ->
+        let (e, rest) = prenot r in
+        help (BinopExpr (ex, Or, e)) rest
+      | ts -> (ex, ts) in
+    let (e, r) = prenot s in
+    help e r
+  and prenot (s: token list): expr * token list =
+    let rec help ex = function
+      | And :: r ->
+        let (e, rest) = comp r in
+        help (BinopExpr (ex, And, e)) rest
+      | ts -> (ex, ts) in
+    let (e, r) = comp s in
+    help e r
+  and comp (s: token list): expr * token list =
+    let rec help ex  = function
+      | Lt :: r ->
+        let (e, rest) = addition r in
+        help (BinopExpr (ex, LessThan, e)) rest
+      | Eq :: r ->
+        let (e, rest) = addition r in
+        help (BinopExpr (ex, Equal, e)) rest
+      | ts -> (ex, ts) in
+    let (e, r) = addition s in
+    help e r
+  and addition (s: token list): expr * token list =
+    let rec help ex  = function
+      | Plus :: r ->
+        let (e, rest) = term r in
+        help (BinopExpr (ex, Plus, e)) rest
+      | Minus :: r ->
+        let (e, rest) = term r in
+        help (BinopExpr (ex, Minus, e)) rest
+      | Concat :: r ->
+        let (e, rest) = term r in
+        help (BinopExpr (ex, Concat, e)) rest
+      | ts -> (ex, ts) in
+    let (e, r) = term s in
+    help e r
+  and term (s: token list): expr * token list =
+    let rec help ex  = function
+      | Times :: r ->
+        let (e, rest) = factor r in
+        help (BinopExpr (ex, Times, e)) rest
+      | Divide :: r ->
+        let (e, rest) = factor r in
+        help (BinopExpr (ex, Divide, e)) rest
+      | Mod :: r ->
+        let (e, rest) = factor r in
+        help (BinopExpr (ex, Modulo, e)) rest
+      | ts -> (ex, ts) in
+    let (e, r) = factor s in
+    help e r
+  and factor (s: token list): expr * token list =
+    (* let rec help ex  = function
+    (* | Not :: r -> *)
+    (*   let (e, rest) = addition r in *)
+    (*   help (LessThan (ex, e)) rest *)
+    | ts -> (ex, ts) in
+  let (e, r) = atom s in
+  help e r *)
+    match s with
+    | Negate :: r ->
+      let (e, r) = factor r in
+      (UnopExpr (Negate, e), r)
+    | _ -> atom' s
+  and atom' (s: token list): expr * token list =
+    match s with
+    | Not :: r ->
+      let (e, r) = atom' r in
+      (UnopExpr (Not, e), r)
+    | _ -> atom s
+  and atom (s: token list): expr * token list =
+    (* match s with *)
+    (* | LParen :: r -> *)
+    (*   let (e, r2) = parse_expr r in *)
+    (*   (match r2 with *)
+    (*     | RParen :: rest -> (e, rest) *)
+    (*     | [] -> raise (ParseError "Expected ), got end of input") *)
+    (*     | t :: _ -> raise (ParseError ("Expected ), got " ^ tok_to_str t))) *)
+    (* | Lit i :: r -> (Int i, r) *)
+    (* | True :: r -> (Bool true, r) *)
+    (* | False :: r -> (Bool false, r) *)
+    (* | Var v :: r -> (Var v, r) *)
+    (* | If :: r -> *)
+    (*   let (cond, r2) = parse_expr r in *)
+    (*   (match r2 with *)
+    (*     | Then :: r3 -> *)
+    (*       let (iftrue, r4) = parse_expr r3 in *)
+    (*       (match r4 with *)
+    (*         | Else :: r5 -> *)
+    (*           let (iffalse, rest) = parse_expr r5 in *)
+    (*           (If (cond, iftrue, iffalse), rest) *)
+    (*         | [] -> raise (ParseError "Expected `else`, got end of input") *)
+    (*         | t :: _ -> raise (ParseError ("Expected `else`, got `" ^ tok_to_str t ^ "`"))) *)
+    (*     | [] -> raise (ParseError "Expected `then`, got end of input") *)
+    (*     | t :: _ -> raise (ParseError ("Expected `then`, got `" ^ tok_to_str t ^ "`"))) *)
+    (* | Let :: (Var id :: (Eq :: r)) -> *)
+    (*   let (value, r2) = parse_expr r in *)
+    (*   (match r2 with *)
+    (*     | In :: r3 -> *)
+    (*       let (scope, rest) = parse_expr r3 in *)
+    (*       (Let (id, value, scope), rest) *)
+    (*     | [] -> raise (ParseError "Expected `in`, got end of input") *)
+    (*     | t :: _ -> raise (ParseError ("Expected `in`, got `" ^ tok_to_str t ^ "`"))) *)
+    (* | [] -> raise (ParseError "Expected <int> or (, got end of input") *)
+    (* | t :: _ -> raise (ParseError ("Expected <int> or (, got " ^ tok_to_str t)) *)
+    match s with
+    (* |  *)
     (* expr in parens *)
+    | LParen :: RParen :: rest -> (UnitExpr, rest)
+    | LParen :: r -> let (e, r2) = parse_expr_toplevel r in
+      (match r2 with
+        | RParen :: rest -> (e, rest) (* expr in parens *)
+        | Comma :: _ -> let (members, rest) = parse_tuple_expr r2 in
+            (TupleExpr (e :: members), rest)
+        | x :: _ -> raise (ParseError ("Expected `,` or `)`, got " ^ tok_to_str x))
+        | [] -> raise (ParseError ("Expected `,` or `)`, got end of input")))
     | Int i :: rest -> (IntLiteralExpr i, rest)
     | True :: rest -> (BoolLiteralExpr true, rest)
     | False :: rest -> (BoolLiteralExpr false, rest)
     | String s :: rest -> (StringLiteralExpr s, rest)
     | Id x :: rest -> (VarExpr x, rest)
-    | LParen :: RParen :: rest -> (UnitExpr, rest)
-    | Match :: r -> let (e, r2) = parse_expr r in
+    | Match :: r -> let (e, r2) = parse_expr_toplevel r in
       (match r2 with
         | With :: r3 -> let (brs, rest) = parse_match_branches [] r3 in
           (MatchExpr (e, List.rev brs), rest)
@@ -119,21 +235,66 @@ and parse_expr (lst: token list): expr * token list =
         | [] -> raise (ParseError ("Expected `with`, got end of input")))
     | x :: _ -> raise (ParseError ("Expected expr, got " ^ tok_to_str x))
     | [] -> raise (ParseError ("Expected expr, got end of input"))
+  and parse_tuple_expr (toks: token list): expr list * token list =
+    match toks with
+    | RParen :: rest -> ([], rest)
+    | Comma :: r -> let (e, r2) = parse_expr_toplevel r in
+        let (subsequent, rest) = parse_tuple_expr r2 in
+          (e :: subsequent, rest)
+    | x :: _ -> raise (ParseError ("Expected `,` or `)`, got " ^ tok_to_str x))
+    | [] -> raise (ParseError ("Expected `,` or `)`, got end of input"))
+  in
+  parse_expr_toplevel lst
+(* match lst with *)
+(*   | Let :: _ -> failwith "stub" *)
+(*   | If :: r -> let (c, r2) = parse_expr r in *)
+(*     (match r2 with *)
+(*       | Then :: r3 -> let (t, r4) = parse_expr r3 in *)
+(*         (match r4 with *)
+(*           | Else :: r5 -> let (f, rest) = parse_expr r5 in *)
+(*             (IfExpr (c, t, f), rest) *)
+(*           | x :: _ -> raise (ParseError ("Expected `else`, got " ^ tok_to_str x)) *)
+(*           | [] -> raise (ParseError ("Expected `else`, got end of input"))) *)
+(*       | x :: _ -> raise (ParseError ("Expected `then`, got " ^ tok_to_str x)) *)
+(*       | [] -> raise (ParseError ("Expected `then`, got end of input"))) *)
+(*   | Fun :: _ -> failwith "stub" *)
+(*   (* applicaiton *) *)
+(*   (* tuples *) *)
+(*   (* binops *) *)
+(*   | Not :: r -> let (e, rest) = parse_expr r in (UnopExpr (Not, e), rest) *)
+(*   | Negate :: r -> let (e, rest) = parse_expr r in (UnopExpr (Negate, e), rest) *)
+(*   (* expr in parens *) *)
+(*   | Int i :: rest -> (IntLiteralExpr i, rest) *)
+(*   | True :: rest -> (BoolLiteralExpr true, rest) *)
+(*   | False :: rest -> (BoolLiteralExpr false, rest) *)
+(*   | String s :: rest -> (StringLiteralExpr s, rest) *)
+(*   | Id x :: rest -> (VarExpr x, rest) *)
+(*   | LParen :: RParen :: rest -> (UnitExpr, rest) *)
+(*   | Match :: r -> let (e, r2) = parse_expr r in *)
+(*     (match r2 with *)
+(*       | With :: r3 -> let (brs, rest) = parse_match_branches [] r3 in *)
+(*         (MatchExpr (e, List.rev brs), rest) *)
+(*       | x :: _ -> raise (ParseError ("Expected `with`, got " ^ tok_to_str x)) *)
+(*       | [] -> raise (ParseError ("Expected `with`, got end of input"))) *)
+(*   | x :: _ -> raise (ParseError ("Expected expr, got " ^ tok_to_str x)) *)
+(*   | [] -> raise (ParseError ("Expected expr, got end of input")) *)
 and parse_match_branches (branches: match_branch list) (lst: token list): match_branch list * token list =
   match lst with
   | Pipe :: Id x :: Id y :: DoubleArrow :: r ->
       let (e, rest) = parse_expr r in
         parse_match_branches (MatchBranch (x, Some(SinglePatternVar y), e) :: branches) rest
   | Pipe :: Id x :: LParen :: r ->
-      let rec help (rr: string list) (toks: token list): string list * token list =
+      let rec help (toks: token list): string list * token list =
         match toks with
-        | RParen :: rest -> (rr, rest)
-        | Comma :: Id x :: rest -> help (x :: rr) rest
-        | Id x :: rest -> help (x :: rr) rest
+        | RParen :: rest -> ([], rest)
+        | Comma :: Id x :: r -> let (subsequent, rest) = help r in
+            (x :: subsequent, rest)
+        | Id x :: r -> let (subsequent, rest) = help r in
+            (x :: subsequent, rest)
         | x :: _ -> raise (ParseError ("Token " ^ tok_to_str x ^ " is invalid inside the pattern vars of a match branch"))
         | [] -> raise (ParseError ("Pattern vars in a match branch must be closed by `)`"))
       in
-        let (pv, r2) = help [] r in
+        let (pv, r2) = help r in
           (match r2 with
           | DoubleArrow :: r3 -> let (e, rest) = parse_expr r3 in
             parse_match_branches (MatchBranch (x, Some(MultiplePatternVars pv), e) :: branches) rest
@@ -149,21 +310,39 @@ and parse_match_branches (branches: match_branch list) (lst: token list): match_
   | _ -> (branches, lst)
 and parse_type (lst: token list): typ * token list =
   let rec parse_function_type (toks: token list): typ * token list =
-    let rec help ex = function
-      | Arrow :: r ->
-        let (e, rest) = parse_tuple_type r in
-        help (FunctionType (ex, e)) rest
-      | ts -> (ex, ts) in
-    let (e, r) = parse_tuple_type toks  in
-    help e r
+    let (first, r) = parse_tuple_type toks in
+      match r with
+      | Arrow :: r2 -> let (others, rest) = parse_function_type r2 in
+        (FunctionType (first, others), rest)
+      | _ -> (first, r)
+    (* let rec help ex = function *)
+    (*   | Arrow :: r -> *)
+    (*     let (e, rest) = parse_tuple_type r in *)
+    (*     help (FunctionType (ex, e)) rest *)
+    (*   | ts -> (ex, ts) in *)
+    (* let (e, r) = parse_tuple_type toks  in *)
+    (* help e r *)
   and parse_tuple_type (toks: token list): typ * token list =
-    let rec help ex = function
+    (* let rec help ex = function *)
+    (*   | Times :: r -> *)
+    (*     let (e, rest) = parse_tuple_type r in *)
+    (*     help (FunctionType (ex, e)) rest (* TODO: actually use tuple type *) *)
+    (*   | ts -> (ex, ts) in *)
+    (* let (e, r) = parse_base_type toks  in *)
+    (* help e r *)
+    let rec help (s: token list): typ list * token list =
+      match s with
       | Times :: r ->
-        let (e, rest) = parse_tuple_type r in
-        help (FunctionType (ex, e)) rest
-      | ts -> (ex, ts) in
-    let (e, r) = parse_base_type toks  in
-    help e r
+          let (t, r2) = parse_base_type r in
+            let (subsequent, rest) = help r2 in
+              (t :: subsequent, rest)
+      | _ -> ([], s)
+    in
+      let (first, r) = parse_base_type toks in
+        let (subtypes, rest) = help r in
+          match subtypes with
+            | [] -> (first, rest)
+            | _ -> (TupleType (first :: subtypes), rest)
   and parse_base_type (toks: token list): typ * token list =
     match toks with
     | LParen :: r -> let (t, r2) = parse_function_type r in

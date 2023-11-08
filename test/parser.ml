@@ -156,4 +156,85 @@ let parse_tests = "parser tests" >::: [
     (Program ([NonRecursiveBinding ("x", [], None, MatchExpr (VarExpr "y", [MatchBranch ("z", Some(MultiplePatternVars ["a"; "b";]), IntLiteralExpr 0)]))]))
     (parse (tokenize "let x = match y with | z (a, b) => 0;;"))
   ~printer:(string_of_program 0));
+  "let-in" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, LetExpr ("y", [], None, IntLiteralExpr 1, BinopExpr (VarExpr "y", Plus, IntLiteralExpr 2)))]))
+    (parse (tokenize "let x = let y = 1 in y + 2;;"))
+  ~printer:(string_of_program 0));
+  "let-in with vars" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, LetExpr ("y", [UntypedParam "z"], None, BinopExpr (VarExpr "z", Plus, IntLiteralExpr 1), FunAppExpr (VarExpr "y", IntLiteralExpr 2)))]))
+    (parse (tokenize "let x = let y z = z + 1 in y 2;;"))
+  ~printer:(string_of_program 0));
+  "let-rec-in" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, LetRecExpr ("y", [], None, IntLiteralExpr 1, BinopExpr (VarExpr "y", Plus, IntLiteralExpr 2)))]))
+    (parse (tokenize "let x = let rec y = 1 in y + 2;;"))
+  ~printer:(string_of_program 0));
+  "if-then-else" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, IfExpr (BinopExpr (IntLiteralExpr 0, LessThan, IntLiteralExpr 1), IntLiteralExpr 0, IntLiteralExpr 1))]))
+    (parse (tokenize "let x = if 0 < 1 then 0 else 1;;"))
+  ~printer:(string_of_program 0));
+  "if-then-else (greedy consume)" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, IfExpr (BinopExpr (IntLiteralExpr 0, LessThan, IntLiteralExpr 1), IntLiteralExpr 0, BinopExpr (IntLiteralExpr 1, Times, IntLiteralExpr 2)))]))
+    (parse (tokenize "let x = if 0 < 1 then 0 else 1 * 2;;"))
+  ~printer:(string_of_program 0));
+  "function literals" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, FunDefExpr ([UntypedParam "y"], None, BinopExpr (VarExpr "y", Times, VarExpr "y")))]))
+    (parse (tokenize "let x = fun y => y * y;;"))
+  ~printer:(string_of_program 0));
+  "function literals (typed and untyped params)" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, FunDefExpr ([UntypedParam "y"; TypedParam ("z", IntType)], None, BinopExpr (VarExpr "y", Minus, VarExpr "z")))]))
+    (parse (tokenize "let x = fun y (z: int) => y - z;;"))
+  ~printer:(string_of_program 0));
+  "function literal (fully typed)" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, FunDefExpr ([TypedParam ("a", IntType); UntypedParam "b"; TypedParam ("c", BoolType)], Some(StringType), IfExpr (VarExpr "c", (FunAppExpr (VarExpr "string_of_int", VarExpr "a")), VarExpr "b")))]))
+    (parse (tokenize "let x = fun (a: int) b (c: bool): string => if c then string_of_int a else b;;"))
+  ~printer:(string_of_program 0));
+  "function application" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, FunAppExpr (VarExpr "string_of_int", IntLiteralExpr 2))]))
+    (parse (tokenize "let x = string_of_int 2;;"))
+  ~printer:(string_of_program 0));
+  "tuple exprs" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, TupleExpr ([BoolLiteralExpr true; IntLiteralExpr 2; StringLiteralExpr "three"]))]))
+    (parse (tokenize "let x = (true, 2, \"three\");;"))
+  ~printer:(string_of_program 0));
+  "type * type -> type * type" >::
+  (fun _ -> assert_equal
+    (Program ([TypeDefBinding ("t", [("T", Some (FunctionType (TupleType ([IntType; IntType]), TupleType ([IntType; IntType]))))])]))
+    (parse (tokenize "type t = | T of int * int -> int * int;;"))
+  ~printer:(string_of_program 0));
+  "type -> type * type -> type" >::
+  (fun _ -> assert_equal
+    (Program ([TypeDefBinding ("t", [("T", Some (FunctionType (IntType, FunctionType (TupleType ([IntType; IntType]), IntType))))])]))
+    (parse (tokenize "type t = | T of int -> int * int -> int;;"))
+  ~printer:(string_of_program 0));
+  "type -> type -> type" >::
+  (fun _ -> assert_equal
+    (Program ([TypeDefBinding ("t", [("A", Some(FunctionType (UnitType, FunctionType (StringType, BoolType))))])]))
+    (parse (tokenize "type t = | A of unit -> string -> bool;;"))
+  ~printer:(string_of_program 0));
+  "type -> (type -> type)" >::
+  (fun _ -> assert_equal
+    (Program ([TypeDefBinding ("t", [("A", Some(FunctionType (UnitType, FunctionType (StringType, BoolType))))])]))
+    (parse (tokenize "type t = | A of unit -> (string -> bool);;"))
+  ~printer:(string_of_program 0));
+  "(type -> type) -> type" >::
+  (fun _ -> assert_equal
+    (Program ([TypeDefBinding ("t", [("A", Some(FunctionType (FunctionType (UnitType, StringType), BoolType)))])]))
+    (parse (tokenize "type t = | A of (unit -> string) -> bool;;"))
+  ~printer:(string_of_program 0));
+
+  (* "example test" >::
+  (fun _ -> assert_equal
+    (Program ([]))
+    (parse (tokenism "Example program"))
+  ~printer:(string_of_program 0)); *)
 ]
