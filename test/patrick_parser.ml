@@ -81,10 +81,10 @@ let test_let_untyped_param _ =
 let test_let_typed_param _ =
   assert_equal
     (parse (tokenize "let a (b : int) = () ;;"))
-    [ NonRecursiveBinding ("a", [ ("b", Some IntType) ], None, UnitExpr) ];
+    [ NonRecursiveBinding ("a", [ TypedParam ("b", IntType) ], None, UnitExpr) ];
   assert_equal
     (parse (tokenize "let rec a (b : int) = () ;;"))
-    [ RecursiveBinding ("a", [ ("b", Some IntType) ], None, UnitExpr) ]
+    [ RecursiveBinding ("a", [ TypedParam ("b", IntType) ], None, UnitExpr) ]
 
 let test_let_unty_params _ =
   assert_equal
@@ -100,7 +100,7 @@ let test_let_ty_params _ =
     [
       NonRecursiveBinding
           ( "a",
-          [ ("b", Some (FunctionType (IntType, UnitType))); ("c", Some StringType) ],
+          [ ("b", Some (FunctionType (IntType, UnitType))); TypedParam ("c", StringType) ],
           None,
           UnitExpr );
     ];
@@ -109,7 +109,7 @@ let test_let_ty_params _ =
     [
       RecursiveBinding
         ( "a",
-          [ ("b", Some (FunctionType (IntType, UnitType))); ("c", Some StringType) ],
+          [ ("b", Some (FunctionType (IntType, UnitType))); TypedParam ("c", StringType) ],
           None,
           UnitExpr );
     ]
@@ -124,7 +124,7 @@ let test_let_complex_params _ =
             ("b", Some (TupleType [ IntType; StringType ]));
             UntypedParam "c";
             UntypedParam "d";
-            ("e", Some BoolType);
+            TypedParam ("e", BoolType);
           ],
           None,
           UnitExpr );
@@ -138,7 +138,7 @@ let test_let_complex_params _ =
             ("b", Some (TupleType [ IntType; StringType ]));
             UntypedParam "c";
             UntypedParam "d";
-            ("e", Some BoolType);
+            TypedParam ("e", BoolType);
           ],
           None,
           UnitExpr );
@@ -156,7 +156,7 @@ let test_let_complex _ =
             UntypedParam "b";
             ("c", Some (FunctionType (TupleType [ IntType; StringType ], UnitType)));
             UntypedParam "d";
-            ("e", Some UnitType);
+            TypedParam ("e", UnitType);
           ],
           Some (FunctionType (IntType, StringType)),
           UnitExpr );
@@ -172,7 +172,7 @@ let test_let_complex _ =
             UntypedParam "b";
             ("c", Some (FunctionType (TupleType [ IntType; StringType ], UnitType)));
             UntypedParam "d";
-            ("e", Some UnitType);
+            TypedParam ("e", UnitType);
           ],
           Some (FunctionType (IntType, StringType)),
           UnitExpr );
@@ -232,7 +232,7 @@ let test_let_in_typed_param _ =
         ( "a",
           [],
           None,
-          LetIn (false, "b", [ ("c", Some IntType) ], None, UnitExpr, VarExpr "d") );
+          LetIn (false, "b", [ TypedParam ("c", IntType) ], None, UnitExpr, VarExpr "d") );
     ];
   assert_equal
     (parse (tokenize "let a = let rec b (c : int) = () in d ;;"))
@@ -241,7 +241,7 @@ let test_let_in_typed_param _ =
         ( "a",
           [],
           None,
-          LetIn (true, "b", [ ("c", Some IntType) ], None, UnitExpr, VarExpr "d") );
+          LetIn (true, "b", [ TypedParam ("c", IntType) ], None, UnitExpr, VarExpr "d") );
     ]
 
 let test_let_in_unty_params _ =
@@ -278,7 +278,7 @@ let test_let_in_ty_params _ =
           LetIn
             ( false,
               "b",
-              [ ("c", Some IntType); ("d", Some (FunctionType (StringType, BoolType))) ],
+              [ TypedParam ("c", IntType); ("d", Some (FunctionType (StringType, BoolType))) ],
               None,
               UnitExpr,
               VarExpr "e" ) );
@@ -294,7 +294,7 @@ let test_let_in_ty_params _ =
           LetIn
             ( true,
               "b",
-              [ ("c", Some IntType); ("d", Some (FunctionType (StringType, BoolType))) ],
+              [ TypedParam ("c", IntType); ("d", Some (FunctionType (StringType, BoolType))) ],
               None,
               UnitExpr,
               VarExpr "e" ) );
@@ -313,7 +313,7 @@ let test_let_in_complex_params _ =
             ( false,
               "b",
               [
-                ("c", Some StringType);
+                TypedParam ("c", StringType);
                 UntypedParam "d";
                 UntypedParam "e";
                 ("f", Some (TupleType [ UnitType; BoolType ]));
@@ -335,7 +335,7 @@ let test_let_in_complex_params _ =
             ( true,
               "b",
               [
-                ("c", Some StringType);
+                TypedParam ("c", StringType);
                 UntypedParam "d";
                 UntypedParam "e";
                 ("f", Some (TupleType [ UnitType; BoolType ]));
@@ -497,7 +497,7 @@ let test_typed_lambda _ =
 let test_lambda_typed_param _ =
   assert_equal
     (parse (tokenize "let a = fun (x : int) => () ;;"))
-    [ NonRecursiveBinding ("a", [], None, FunDefExpr ([ ("x", Some IntType) ], None, UnitExpr)) ]
+    [ NonRecursiveBinding ("a", [], None, FunDefExpr ([ TypedParam ("x", IntType) ], None, UnitExpr)) ]
 
 let test_lambda_unty_params _ =
   assert_equal
@@ -519,7 +519,7 @@ let test_lambda_ty_params _ =
           [],
           None,
           Lambda
-            ( [ ("x", Some (FunctionType (IntType, StringType))); ("y", Some BoolType) ],
+            ( [ ("x", Some (FunctionType (IntType, StringType))); TypedParam ("y", BoolType) ],
               None,
               UnitExpr ) );
     ]
@@ -534,7 +534,7 @@ let test_lambda_complex_params _ =
           None,
           Lambda
             ( [
-                ("w", Some IntType);
+                TypedParam ("w", IntType);
                 UntypedParam "x";
                 ("y", Some (TupleType [ BoolType; UnitType ]));
                 UntypedParam "z";
