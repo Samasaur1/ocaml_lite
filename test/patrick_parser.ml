@@ -166,9 +166,8 @@ let test_let_complex _ =
        (tokenize
           "let rec a b (c : (int * string) -> unit) d (e : unit) : int -> string = () ;;"))
     [
-      Let
-        ( true,
-          "a",
+      RecursiveBinding
+        ( "a",
           [
             ("b", None);
             ("c", Some (FunctionType (TupleType [ IntType; StringType ], UnitType)));
@@ -1203,9 +1202,8 @@ let test_factorial _ =
        (tokenize
           "let rec fact n = if n = 0 || n = 1 then 1 else (fact (n - 1)) + (fact (n - 2)) ;;"))
     [
-      Let
-        ( true,
-          "fact",
+      RecursiveBinding
+        ( "fact",
           [ ("n", None) ],
           None,
           IfExpr
@@ -1232,9 +1230,8 @@ let test_list_len _ =
         ( "int_list",
           [ ("Nil", None); ("Val", Some (TupleType [ IntType; UserDeclaredType "int_list" ])) ]
         );
-      Let
-        ( true,
-          "len",
+      RecursiveBinding
+        ( "len",
           [ ("l", None) ],
           None,
           EMatch
