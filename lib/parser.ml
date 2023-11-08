@@ -230,6 +230,18 @@ and parse_expr (lst: token list): expr * token list =
         | tok :: _ -> raise (ParseError ("Expected `in`, got " ^ tok_to_str tok))
         | [] -> raise (ParseError ("Expected `in`, got end of input"))
       )
+    | If :: r -> let (c, r2) = parse_expr r in
+      (match r2 with
+        | Then :: r3 -> let (t, r4) = parse_expr r3 in
+          (match r4 with
+            | Else :: r5 -> let (f, rest) = parse_expr r5 in
+              (IfExpr (c, t, f), rest)
+            | x :: _ -> raise (ParseError ("Expected `else`, got " ^ tok_to_str x))
+            | [] -> raise (ParseError ("Expected `else`, got end of input")))
+        | x :: _ -> raise (ParseError ("Expected `then`, got " ^ tok_to_str x))
+        | [] -> raise (ParseError ("Expected `then`, got end of input")))
+(*   | Fun :: _ -> failwith "stub" *)
+(*   (* applicaiton *) *)
     | LParen :: RParen :: rest -> (UnitExpr, rest)
     | LParen :: r -> let (e, r2) = parse_expr_toplevel r in
       (match r2 with
