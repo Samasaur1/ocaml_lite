@@ -194,14 +194,14 @@ let test_typed_let_in_val _ =
   assert_equal
     (parse (tokenize "let a = let b : unit = () in c ;;"))
     [
-      Let
-        (false, "a", [], None, LetExpr ("b", [], Some UnitType, UnitExpr, VarExpr "c"));
+      NonRecursiveBinding
+        ("a", [], None, LetExpr ("b", [], Some UnitType, UnitExpr, VarExpr "c"));
     ];
   assert_equal
     (parse (tokenize "let a = let rec b : unit = () in c ;;"))
     [
-      Let
-        (false, "a", [], None, LetRecExpr ("b", [], Some UnitType, UnitExpr, VarExpr "c"));
+      NonRecursiveBinding
+        ("a", [], None, LetRecExpr ("b", [], Some UnitType, UnitExpr, VarExpr "c"));
     ]
 
 let test_let_in_untyped_param _ =
