@@ -104,22 +104,13 @@ not
   *)
 and parse_expr (lst: token list): expr * token list =
   let rec parse_expr_toplevel (s: token list): expr * token list =
-    let rec help (rr: expr) (toks: token list): expr * token list =
-      try
-        let (base', r) = parse_expr_binops toks in
-        help (FunAppExpr (rr, base')) r
-      with
-        ParseError _ -> (rr, toks)
-    in
-    let (base, rest) = parse_expr_binops s in
-    help base rest
   (*   let (e1, r) = parse_expr_binops s in *)
   (*   try *)
   (*     let (e2, r2) = parse_expr_binops r in *)
   (*     (FunAppExpr (e1, e2), r2) *)
   (*   with *)
   (*     | ParseError _ -> (e1, r) *)
-  (* (* parse_expr_binops s *) *)
+  parse_expr_binops s
   and parse_expr_binops (s: token list): expr * token list =
     let rec help ex = function
       | Or :: r ->
@@ -193,7 +184,17 @@ and parse_expr (lst: token list): expr * token list =
     | Not :: r ->
       let (e, r) = atom' r in
       (UnopExpr (InvertBool, e), r)
-    | _ -> atom s
+    | _ -> atom'' s
+  and atom'' (s: token list): expr * token list =
+    let rec help (rr: expr) (toks: token list): expr * token list =
+      try
+        let (base', r) = atom toks in
+        help (FunAppExpr (rr, base')) r
+      with
+        ParseError _ -> (rr, toks)
+    in
+    let (base, rest) = atom s in
+    help base rest
   and atom (s: token list): expr * token list =
     (* match s with *)
     (* | LParen :: r -> *)
