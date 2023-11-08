@@ -8,6 +8,13 @@ let parse (lst: token list): binding list =
   let Program (bds) = parse lst in
     bds
 
+  (* let assert_equal ?ctxt:test_ctxt ?cmp ?printer ?pp_diff ?msg real expected = assert_equal ~ctxt:ctxt ~cmp:cmp ~printer:printer ~pp_diff:pp_diff ~msg:msg expected real *)
+
+let assert_equal ?printer real expected =
+  match printer with
+  | None -> assert_equal expected real
+  | Some p -> assert_equal expected real ~printer:p
+
 (* `type` statements *)
 
 let test_empty _ = (* technically an empty program should not be parsed *)
