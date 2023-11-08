@@ -40,8 +40,10 @@ and binop =
   | Or
 
 and unop =
-  | Not
-  | Negate
+  (* | Not (* `not` — inverting booleans *) *)
+  (* | Negate (* `~` — negating integers *) *)
+  | InvertBool (* `not` *)
+  | NegateInt (* `~` *)
 
 and typ =
   | FunctionType of typ * typ

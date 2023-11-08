@@ -81,7 +81,9 @@ and parse_type_binding (lst: token list): binding * token list =
         | [] -> raise (ParseError ("Expected `|`, got end of input"))
       in
         let (brs, rest) = help [] r in
-          (TypeDefBinding (x, List.rev brs), rest)
+          match brs with
+          | [] -> raise (ParseError "Type list cannot be empty")
+          | _ -> (TypeDefBinding (x, List.rev brs), rest)
   )
   | Type :: Id _ :: x :: _ -> raise (ParseError ("Expected `=`, got " ^ tok_to_str x))
   | Type :: x :: _ -> raise (ParseError ("Expected type name, got " ^ tok_to_str x))
@@ -102,22 +104,13 @@ not
   *)
 and parse_expr (lst: token list): expr * token list =
   let rec parse_expr_toplevel (s: token list): expr * token list =
-    let rec help (rr: expr) (toks: token list): expr * token list =
-      try
-        let (base', r) = parse_expr_binops toks in
-        help (FunAppExpr (rr, base')) r
-      with
-        ParseError _ -> (rr, toks)
-    in
-    let (base, rest) = parse_expr_binops s in
-    help base rest
   (*   let (e1, r) = parse_expr_binops s in *)
   (*   try *)
   (*     let (e2, r2) = parse_expr_binops r in *)
   (*     (FunAppExpr (e1, e2), r2) *)
   (*   with *)
   (*     | ParseError _ -> (e1, r) *)
-  (* (* parse_expr_binops s *) *)
+  parse_expr_binops s
   and parse_expr_binops (s: token list): expr * token list =
     let rec help ex = function
       | Or :: r ->
@@ -184,14 +177,24 @@ and parse_expr (lst: token list): expr * token list =
     match s with
     | Negate :: r ->
       let (e, r) = factor r in
-      (UnopExpr (Negate, e), r)
+      (UnopExpr (NegateInt, e), r)
     | _ -> atom' s
   and atom' (s: token list): expr * token list =
     match s with
     | Not :: r ->
       let (e, r) = atom' r in
-      (UnopExpr (Not, e), r)
-    | _ -> atom s
+      (UnopExpr (InvertBool, e), r)
+    | _ -> atom'' s
+  and atom'' (s: token list): expr * token list =
+    let rec help (rr: expr) (toks: token list): expr * token list =
+      try
+        let (base', r) = atom toks in
+        help (FunAppExpr (rr, base')) r
+      with
+        ParseError _ -> (rr, toks)
+    in
+    let (base, rest) = atom s in
+    help base rest
   and atom (s: token list): expr * token list =
     (* match s with *)
     (* | LParen :: r -> *)
@@ -255,19 +258,22 @@ and parse_expr (lst: token list): expr * token list =
         | x :: _ -> raise (ParseError ("Expected `then`, got " ^ tok_to_str x))
         | [] -> raise (ParseError ("Expected `then`, got end of input")))
     | Fun :: r -> let (params, r2) = parse_param_list r in
-      (match r2 with
-        | DoubleArrow :: r3 -> let (body, rest) = parse_expr r3 in
-          (FunDefExpr (params, None, body), rest)
-        | Colon :: r3 -> let (t, r4) = parse_type r3 in
-          (match r4 with
-            | DoubleArrow :: r5 -> let (body, rest) = parse_expr r5 in
-              (FunDefExpr (params, Some (t), body), rest)
-            | x :: _ -> raise (ParseError ("Expected `=>`, got " ^ tok_to_str x))
-            | [] -> raise (ParseError ("Expected `=>`, got end of input"))
-          )
-        | x :: _ -> raise (ParseError ("Expected `:` or `=>`, got " ^ tok_to_str x))
-        | [] -> raise (ParseError ("Expected `:` or `=>`, got end of input"))
-      )
+      (match params with
+        | [] -> raise (ParseError ("'fun' cannot have empty parameter list"))
+        | _ -> 
+          (match r2 with
+            | DoubleArrow :: r3 -> let (body, rest) = parse_expr r3 in
+              (FunDefExpr (params, None, body), rest)
+            | Colon :: r3 -> let (t, r4) = parse_type r3 in
+              (match r4 with
+                | DoubleArrow :: r5 -> let (body, rest) = parse_expr r5 in
+                  (FunDefExpr (params, Some (t), body), rest)
+                | x :: _ -> raise (ParseError ("Expected `=>`, got " ^ tok_to_str x))
+                | [] -> raise (ParseError ("Expected `=>`, got end of input"))
+              )
+            | x :: _ -> raise (ParseError ("Expected `:` or `=>`, got " ^ tok_to_str x))
+            | [] -> raise (ParseError ("Expected `:` or `=>`, got end of input"))
+          ))
     | LParen :: RParen :: rest -> (UnitExpr, rest)
     | LParen :: r -> let (e, r2) = parse_expr_toplevel r in
       (match r2 with
