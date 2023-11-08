@@ -273,6 +273,11 @@ let parse_tests = "parser tests" >::: [
     with
     | ParseError _ -> assert_bool "" true
     | _ -> assert_failure "Unexpected error");
+  "complex example from class" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("a", [], None, LetExpr ("maybe", [UntypedParam "f"; UntypedParam "x"; UntypedParam "y"], None, IfExpr (VarExpr "x", FunAppExpr (VarExpr "f", VarExpr "y"), VarExpr "y"), FunAppExpr (FunAppExpr (FunAppExpr (VarExpr "maybe", FunDefExpr ([UntypedParam "x"], None, BinopExpr (VarExpr "x", Plus, IntLiteralExpr 1))), BoolLiteralExpr false), IntLiteralExpr 1)))]))
+    (parse (tokenize "let a = let maybe f x y = if x then f y else y in maybe (fun x => x + 1) false 1;;"))
+  ~printer:(string_of_program 0));
 
   (* "example test" >::
   (fun _ -> assert_equal
