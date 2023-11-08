@@ -100,7 +100,7 @@ let test_let_ty_params _ =
     [
       NonRecursiveBinding
           ( "a",
-          [ ("b", Some (FunctionType (IntType, UnitType))); TypedParam ("c", StringType) ],
+          [ TypedParam ("b", FunctionType (IntType, UnitType)); TypedParam ("c", StringType) ],
           None,
           UnitExpr );
     ];
@@ -109,7 +109,7 @@ let test_let_ty_params _ =
     [
       RecursiveBinding
         ( "a",
-          [ ("b", Some (FunctionType (IntType, UnitType))); TypedParam ("c", StringType) ],
+          [ TypedParam ("b", FunctionType (IntType, UnitType)); TypedParam ("c", StringType) ],
           None,
           UnitExpr );
     ]
@@ -121,7 +121,7 @@ let test_let_complex_params _ =
       NonRecursiveBinding
         ( "a",
           [
-            ("b", Some (TupleType [ IntType; StringType ]));
+            TypedParam ("b", TupleType [ IntType; StringType ]);
             UntypedParam "c";
             UntypedParam "d";
             TypedParam ("e", BoolType);
@@ -135,7 +135,7 @@ let test_let_complex_params _ =
       RecursiveBinding
         ( "a",
           [
-            ("b", Some (TupleType [ IntType; StringType ]));
+            TypedParam ("b", TupleType [ IntType; StringType ]);
             UntypedParam "c";
             UntypedParam "d";
             TypedParam ("e", BoolType);
@@ -154,7 +154,7 @@ let test_let_complex _ =
         ( "a",
           [
             UntypedParam "b";
-            ("c", Some (FunctionType (TupleType [ IntType; StringType ], UnitType)));
+            TypedParam ("c", FunctionType (TupleType [ IntType; StringType ], UnitType));
             UntypedParam "d";
             TypedParam ("e", UnitType);
           ],
@@ -170,7 +170,7 @@ let test_let_complex _ =
         ( "a",
           [
             UntypedParam "b";
-            ("c", Some (FunctionType (TupleType [ IntType; StringType ], UnitType)));
+            TypedParam ("c", FunctionType (TupleType [ IntType; StringType ], UnitType));
             UntypedParam "d";
             TypedParam ("e", UnitType);
           ],
@@ -536,7 +536,7 @@ let test_lambda_complex_params _ =
             ( [
                 TypedParam ("w", IntType);
                 UntypedParam "x";
-                ("y", Some (TupleType [ BoolType; UnitType ]));
+                TypedParam ("y", TupleType [ BoolType; UnitType ]);
                 UntypedParam "z";
               ],
               None,
@@ -557,8 +557,8 @@ let test_lambda_complex _ =
             ( [
                 UntypedParam "w";
                 UntypedParam "x";
-                ("y", Some (TupleType [ UnitType; UnitType ]));
-                ("z", Some (FunctionType (IntType, StringType)));
+                TypedParam ("y", TupleType [ UnitType; UnitType ]);
+                TypedParam ("z", FunctionType (IntType, StringType));
               ],
               Some UnitType,
               UnitExpr ) );
