@@ -208,9 +208,8 @@ let test_let_in_untyped_param _ =
   assert_equal
     (parse (tokenize "let a = let b c = () in d ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           LetIn (false, "b", [ ("c", None) ], None, UnitExpr, VarExpr "d") );
@@ -218,9 +217,8 @@ let test_let_in_untyped_param _ =
   assert_equal
     (parse (tokenize "let a = let rec b c = () in d ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           LetIn (true, "b", [ ("c", None) ], None, UnitExpr, VarExpr "d") );
@@ -230,9 +228,8 @@ let test_let_in_typed_param _ =
   assert_equal
     (parse (tokenize "let a = let b (c : int) = () in d ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           LetIn (false, "b", [ ("c", Some IntType) ], None, UnitExpr, VarExpr "d") );
@@ -240,9 +237,8 @@ let test_let_in_typed_param _ =
   assert_equal
     (parse (tokenize "let a = let rec b (c : int) = () in d ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           LetIn (true, "b", [ ("c", Some IntType) ], None, UnitExpr, VarExpr "d") );
@@ -252,9 +248,8 @@ let test_let_in_unty_params _ =
   assert_equal
     (parse (tokenize "let a = let b c d = () in e ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           LetIn (false, "b", [ ("c", None); ("d", None) ], None, UnitExpr, VarExpr "e")
@@ -263,9 +258,8 @@ let test_let_in_unty_params _ =
   assert_equal
     (parse (tokenize "let a = let rec b c d = () in e ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           LetIn (true, "b", [ ("c", None); ("d", None) ], None, UnitExpr, VarExpr "e")
@@ -277,9 +271,8 @@ let test_let_in_ty_params _ =
     (parse
        (tokenize "let a = let b (c : int) (d : string -> bool) = () in e ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           LetIn
@@ -294,9 +287,8 @@ let test_let_in_ty_params _ =
     (parse
        (tokenize "let a = let rec b (c : int) (d : string -> bool) = () in e ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           LetIn
@@ -313,9 +305,8 @@ let test_let_in_complex_params _ =
     (parse
        (tokenize "let a = let b (c : string) d e (f : unit * bool) = () in g ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           LetIn
@@ -336,9 +327,8 @@ let test_let_in_complex_params _ =
        (tokenize
           "let a = let rec b (c : string) d e (f : unit * bool) = () in g ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           LetIn
@@ -361,9 +351,8 @@ let test_let_in_complex _ =
        (tokenize
           "let a = let b (c : int * bool) d (e : unit -> unit) f : string = () in g ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           LetIn
@@ -384,9 +373,8 @@ let test_let_in_complex _ =
        (tokenize
           "let a = let rec b (c : int * bool) d (e : unit -> unit) f : string = () in g ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           LetIn
@@ -407,9 +395,8 @@ let test_nested_let_in_param _ =
   assert_equal
     (parse (tokenize "let a = let b = let rec c = () in d in e ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           LetIn
@@ -425,9 +412,8 @@ let test_nested_let_in_value _ =
   assert_equal
     (parse (tokenize "let a = let rec b = () in let c = () in d ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           LetIn
@@ -448,9 +434,8 @@ let test_nested_if_cond _ =
   assert_equal
     (parse (tokenize "let a = if if b then c else d then e else f ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           IfExpr (IfExpr (VarExpr "b", VarExpr "c", VarExpr "d"), VarExpr "e", VarExpr "f") );
@@ -460,9 +445,8 @@ let test_nested_then_cond _ =
   assert_equal
     (parse (tokenize "let a = if b then if c then d else e else f ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           IfExpr (VarExpr "b", IfExpr (VarExpr "c", VarExpr "d", VarExpr "e"), VarExpr "f") );
@@ -472,9 +456,8 @@ let test_nested_else_cond _ =
   assert_equal
     (parse (tokenize "let a = if b then c else if d then e else f ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           IfExpr (VarExpr "b", VarExpr "c", IfExpr (VarExpr "d", VarExpr "e", VarExpr "f")) );
@@ -486,9 +469,8 @@ let test_super_nested_cond _ =
        (tokenize
           "let a = if if b then c else d then if e then f else g else if h then i else j ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           IfExpr
@@ -521,9 +503,8 @@ let test_lambda_unty_params _ =
   assert_equal
     (parse (tokenize "let a = fun x y z => () ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           FunDefExpr ([ ("x", None); ("y", None); ("z", None) ], None, UnitExpr) );
@@ -533,9 +514,8 @@ let test_lambda_ty_params _ =
   assert_equal
     (parse (tokenize "let a = fun (x : int -> string) (y : bool) => () ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           Lambda
@@ -548,9 +528,8 @@ let test_lambda_complex_params _ =
   assert_equal
     (parse (tokenize "let a = fun (w : int) x (y : bool * unit) z => () ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           Lambda
@@ -570,9 +549,8 @@ let test_lambda_complex _ =
        (tokenize
           "let a = fun w x (y : unit * unit) (z : int -> string) : unit => () ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           Lambda
@@ -590,9 +568,8 @@ let test_lambda_nested _ =
   assert_equal
     (parse (tokenize "let a = fun x => fun y => () ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           FunDefExpr ([ ("x", None) ], None, FunDefExpr ([ ("y", None) ], None, UnitExpr))
@@ -610,9 +587,8 @@ let test_multiple_funcall _ =
   assert_equal
     (parse (tokenize "let a = b c d e ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           FunAppExpr(FunAppExpr(FunAppExpr(VarExpr "b", VarExpr "c"), VarExpr "d"), VarExpr "e") );
@@ -622,9 +598,8 @@ let test_nested_funcall _ =
   assert_equal
     (parse (tokenize "let a = (b c) (d e) ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           FunAppExpr(FunAppExpr(VarExpr "b", VarExpr "c"), FunAppExpr(VarExpr "d", VarExpr "e")) );
@@ -634,9 +609,8 @@ let test_funcall_fun _ =
   assert_equal
     (parse (tokenize "let a = (fun x => ()) y ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           FunAppExpr(FunDefExpr ([ ("x", None) ], None, UnitExpr), VarExpr "y") );
@@ -651,9 +625,8 @@ let test_long_tuple _ =
   assert_equal
     (parse (tokenize "let a = (b, c, d, e, f, g) ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           TupleExpr[ VarExpr "b"; VarExpr "c"; VarExpr "d"; VarExpr "e"; VarExpr "f"; VarExpr "g" ] );
@@ -663,9 +636,8 @@ let test_nested_tuple _ =
   assert_equal
     (parse (tokenize "let a = ((b, c), d, ((e, f, g), h)) ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           Tuple
@@ -687,9 +659,8 @@ let test_let_in_tuple _ =
   assert_equal
     (parse (tokenize "let a = (let b = () in c, let rec d = () in f) ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           Tuple
@@ -703,9 +674,8 @@ let test_lambda_tuple _ =
   assert_equal
     (parse (tokenize "let a = (fun x => (), fun y => y) ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           Tuple
@@ -729,9 +699,8 @@ let test_addition_assoc _ =
   assert_equal
     (parse (tokenize "let a = b + c + d ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr (BPlus, BinopExpr (BPlus, VarExpr "b", VarExpr "c"), VarExpr "d") );
@@ -746,9 +715,8 @@ let test_subtraction_assoc _ =
   assert_equal
     (parse (tokenize "let a = b - c - d ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr (BMinus, BinopExpr (BMinus, VarExpr "b", VarExpr "c"), VarExpr "d") );
@@ -758,9 +726,8 @@ let test_mixed_add_sub _ =
   assert_equal
     (parse (tokenize "let a = b + c - d + e ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr
@@ -778,9 +745,8 @@ let test_mult_assoc _ =
   assert_equal
     (parse (tokenize "let a = b * c * d ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr (BTimes, BinopExpr (BTimes, VarExpr "b", VarExpr "c"), VarExpr "d") );
@@ -795,9 +761,8 @@ let test_mixed_mult_div _ =
   assert_equal
     (parse (tokenize "let a = b * c / d mod e ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr
@@ -810,9 +775,8 @@ let test_div_assoc _ =
   assert_equal
     (parse (tokenize "let a = b / c / d ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr (BDiv, BinopExpr (BDiv, VarExpr "b", VarExpr "c"), VarExpr "d") );
@@ -827,9 +791,8 @@ let test_mod_assoc _ =
   assert_equal
     (parse (tokenize "let a = b mod c mod d ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr (BMod, BinopExpr (BMod, VarExpr "b", VarExpr "c"), VarExpr "d") );
@@ -854,9 +817,8 @@ let test_complex_arithmetic _ =
   assert_equal
     (parse (tokenize "let a = b * c + d mod e / ~f - g ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr
@@ -890,9 +852,8 @@ let test_concat_assoc _ =
   assert_equal
     (parse (tokenize "let a = b ^ c ^ d ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr (BConcat, BinopExpr (BConcat, VarExpr "b", VarExpr "c"), VarExpr "d") );
@@ -909,9 +870,8 @@ let test_logand_assoc _ =
   assert_equal
     (parse (tokenize "let a = b && c && d ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr (BLogAnd, BinopExpr (BLogAnd, VarExpr "b", VarExpr "c"), VarExpr "d") );
@@ -926,9 +886,8 @@ let test_logor_assoc _ =
   assert_equal
     (parse (tokenize "let a = b || c || d ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr (BLogOr, BinopExpr (BLogOr, VarExpr "b", VarExpr "c"), VarExpr "d") );
@@ -938,9 +897,8 @@ let test_bool_precedence _ =
   assert_equal
     (parse (tokenize "let a = b || c && d ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr (BLogOr, VarExpr "b", BinopExpr (BLogAnd, VarExpr "c", VarExpr "d")) );
@@ -948,9 +906,8 @@ let test_bool_precedence _ =
   assert_equal
     (parse (tokenize "let a = b && c || d ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr (BLogOr, BinopExpr (BLogAnd, VarExpr "b", VarExpr "c"), VarExpr "d") );
@@ -965,9 +922,8 @@ let test_nested_lognot _ =
   assert_equal
     (parse (tokenize "let a = not not not b ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           UnopExpr (ULogNot, UnopExpr (ULogNot, UnopExpr (ULogNot, VarExpr "b"))) );
@@ -977,9 +933,8 @@ let test_lognot_precedence _ =
   assert_equal
     (parse (tokenize "let a = not b || not c ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr (BLogOr, UnopExpr (ULogNot, VarExpr "b"), UnopExpr (ULogNot, VarExpr "c")) );
@@ -987,9 +942,8 @@ let test_lognot_precedence _ =
   assert_equal
     (parse (tokenize "let a = not b && not c ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr (BLogAnd, UnopExpr (ULogNot, VarExpr "b"), UnopExpr (ULogNot, VarExpr "c")) );
@@ -1006,9 +960,8 @@ let test_complex_log_ops _ =
   assert_equal
     (parse (tokenize "let a = b || not c && not d && e || f || g ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr
@@ -1033,9 +986,8 @@ let test_cmp_with_log _ =
   assert_equal
     (parse (tokenize "let a = b && c < d || e = f || g ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           BinopExpr
@@ -1077,9 +1029,8 @@ let test_multiarm_match _ =
   assert_equal
     (parse (tokenize "let a = match b with | c => d | e => f ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           EMatch (VarExpr "b", [ ("c", None, VarExpr "d"); ("e", None, VarExpr "f") ]) );
@@ -1089,9 +1040,8 @@ let test_simple_match_pat _ =
   assert_equal
     (parse (tokenize "let a = match b with | c d => e ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           EMatch (VarExpr "b", [ ("c", Some (BarePat "d"), VarExpr "e") ]) );
@@ -1101,9 +1051,8 @@ let test_tuple_match_pat _ =
   assert_equal
     (parse (tokenize "let a = match b with | c (d, e) => f ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           EMatch (VarExpr "b", [ ("c", Some (TuplePat [ "d"; "e" ]), VarExpr "f") ]) );
@@ -1113,9 +1062,8 @@ let test_long_tuple_match _ =
   assert_equal
     (parse (tokenize "let a = match b with | c (d, e, f, g) => h ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           EMatch
@@ -1128,9 +1076,8 @@ let test_multi_tup_match _ =
     (parse
        (tokenize "let a = match b with | c (d, e) => f | g (h, i, j) => k ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           EMatch
@@ -1147,9 +1094,8 @@ let test_complex_match_arms _ =
        (tokenize
           "let a = match b with | c (d, e, f) => g | h => i | j k => l | m => n ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           EMatch
@@ -1166,9 +1112,8 @@ let test_nested_match_param _ =
   assert_equal
     (parse (tokenize "let a = match match b with | c => d with | e => f ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           EMatch
@@ -1181,9 +1126,8 @@ let test_match_in_match_arm _ =
     (parse
        (tokenize "let a = match b with | c => match d with | e => f | g => h ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           EMatch
@@ -1254,9 +1198,8 @@ let test_parenthetopia _ =
     (parse (tokenize "let a = (()((()()((()((())))())))()()) ;;"))
     (* (nil (nil nil ((nil nil) nil)) nil nil) *)
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           Funcall
@@ -1274,9 +1217,8 @@ let test_loss_expr _ =
   assert_equal
     (parse (tokenize "let a = match b with | c => d || e || f |_ => g ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [],
           None,
           EMatch
