@@ -4,6 +4,10 @@ open Ocaml_lite.Ast
 open Ocaml_lite.Lexer
 open Ocaml_lite.Parser
 
+let parse (lst: token list): binding list =
+  let Program (bds) = parse lst in
+    bds
+
 (* `type` statements *)
 
 let test_empty _ =
@@ -13,7 +17,7 @@ let test_empty _ =
 let test_simple_type_decl _ =
   assert_equal
     (parse (tokenize "type a = | b;;"))
-    [ TyDecl ("a", [ ("b", None) ]) ]
+    [ TypeDefBinding ("a", [ ("b", None) ]) ]
 
 let test_empty_type_illegal _ =
   assert_raises (ParseError "Type list cannot be empty") (fun _ ->
@@ -22,29 +26,29 @@ let test_empty_type_illegal _ =
 let test_multiple_type_decl _ =
   assert_equal
     (parse (tokenize "type a = | b | c ;;"))
-    [ TyDecl ("a", [ ("b", None); ("c", None) ]) ]
+    [ TypeDefBinding ("a", [ ("b", None); ("c", None) ]) ]
 
 let test_type_of_decl _ =
   assert_equal
     (parse (tokenize "type a = | b of int ;;"))
-    [ TyDecl ("a", [ ("b", Some TInt) ]) ]
+    [ TypeDefBinding ("a", [ ("b", Some IntType) ]) ]
 
 let test_multiple_of_decl _ =
   assert_equal
     (parse (tokenize "type a = | b of string | c of int -> int ;;"))
-    [ TyDecl ("a", [ ("b", Some TString); ("c", Some (TArrow (TInt, TInt))) ]) ]
+    [ TypeDefBinding ("a", [ ("b", Some StringType); ("c", Some (FunctionType (IntType, IntType))) ]) ]
 
 let test_mixed_ty_decl _ =
   assert_equal
     (parse (tokenize "type a = | b of int -> string | c | d | e of bool ;;"))
     [
-      TyDecl
+      TypeDefBinding
         ( "a",
           [
-            ("b", Some (TArrow (TInt, TString)));
+            ("b", Some (FunctionType (IntType, StringType)));
             ("c", None);
             ("d", None);
-            ("e", Some TBool);
+            ("e", Some BoolType);
           ] );
     ]
 
@@ -53,95 +57,91 @@ let test_mixed_ty_decl _ =
 let test_untyped_let _ =
   assert_equal
     (parse (tokenize "let a = () ;;"))
-    [ Let (false, "a", [], None, ENil) ];
+    [ NonRecursiveBinding ("a", [], None, UnitExpr) ];
   assert_equal
     (parse (tokenize "let rec a = () ;;"))
-    [ Let (true, "a", [], None, ENil) ]
+    [ RecursiveBinding ("a", [], None, UnitExpr) ]
 
 let test_typed_let_val _ =
   assert_equal
     (parse (tokenize "let a : unit = () ;;"))
-    [ Let (false, "a", [], Some TUnit, ENil) ];
+    [ NonRecursiveBinding ("a", [], Some UnitType, UnitExpr) ];
   assert_equal
     (parse (tokenize "let rec a : unit = () ;;"))
-    [ Let (true, "a", [], Some TUnit, ENil) ]
+    [ RecursiveBinding ("a", [], Some UnitType, UnitExpr) ]
 
 let test_let_untyped_param _ =
   assert_equal
     (parse (tokenize "let a b = () ;;"))
-    [ Let (false, "a", [ ("b", None) ], None, ENil) ];
+    [ NonRecursiveBinding ("a", [ ("b", None) ], None, UnitExpr) ];
   assert_equal
     (parse (tokenize "let rec a b = () ;;"))
-    [ Let (true, "a", [ ("b", None) ], None, ENil) ]
+    [ RecursiveBinding ("a", [ ("b", None) ], None, UnitExpr) ]
 
 let test_let_typed_param _ =
   assert_equal
     (parse (tokenize "let a (b : int) = () ;;"))
-    [ Let (false, "a", [ ("b", Some TInt) ], None, ENil) ];
+    [ NonRecursiveBinding ("a", [ ("b", Some IntType) ], None, UnitExpr) ];
   assert_equal
     (parse (tokenize "let rec a (b : int) = () ;;"))
-    [ Let (true, "a", [ ("b", Some TInt) ], None, ENil) ]
+    [ RecursiveBinding ("a", [ ("b", Some IntType) ], None, UnitExpr) ]
 
 let test_let_unty_params _ =
   assert_equal
     (parse (tokenize "let a b c = () ;;"))
-    [ Let (false, "a", [ ("b", None); ("c", None) ], None, ENil) ];
+    [ NonRecursiveBinding ("a", [ ("b", None); ("c", None) ], None, UnitExpr) ];
   assert_equal
     (parse (tokenize "let rec a b c = () ;;"))
-    [ Let (true, "a", [ ("b", None); ("c", None) ], None, ENil) ]
+    [ RecursiveBinding ("a", [ ("b", None); ("c", None) ], None, UnitExpr) ]
 
 let test_let_ty_params _ =
   assert_equal
     (parse (tokenize "let a (b : int -> unit) (c : string) = () ;;"))
     [
-      Let
-        ( false,
-          "a",
-          [ ("b", Some (TArrow (TInt, TUnit))); ("c", Some TString) ],
+      NonRecursiveBinding
+          ( "a",
+          [ ("b", Some (FunctionType (IntType, UnitType))); ("c", Some StringType) ],
           None,
-          ENil );
+          UnitExpr );
     ];
   assert_equal
     (parse (tokenize "let rec a (b : int -> unit) (c : string) = () ;;"))
     [
-      Let
-        ( true,
-          "a",
-          [ ("b", Some (TArrow (TInt, TUnit))); ("c", Some TString) ],
+      RecursiveBinding
+        ( "a",
+          [ ("b", Some (FunctionType (IntType, UnitType))); ("c", Some StringType) ],
           None,
-          ENil );
+          UnitExpr );
     ]
 
 let test_let_complex_params _ =
   assert_equal
     (parse (tokenize "let a (b : int * string) c d (e : bool) = () ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [
-            ("b", Some (TProduct [ TInt; TString ]));
+            ("b", Some (TupleType [ IntType; StringType ]));
             ("c", None);
             ("d", None);
-            ("e", Some TBool);
+            ("e", Some BoolType);
           ],
           None,
-          ENil );
+          UnitExpr );
     ];
   assert_equal
     (parse (tokenize "let rec a (b : int * string) c d (e : bool) = () ;;"))
     [
-      Let
-        ( true,
-          "a",
+      RecursiveBinding
+        ( "a",
           [
-            ("b", Some (TProduct [ TInt; TString ]));
+            ("b", Some (TupleType [ IntType; StringType ]));
             ("c", None);
             ("d", None);
-            ("e", Some TBool);
+            ("e", Some BoolType);
           ],
           None,
-          ENil );
+          UnitExpr );
     ]
 
 let test_let_complex _ =
@@ -150,17 +150,16 @@ let test_let_complex _ =
        (tokenize
           "let a b (c : (int * string) -> unit) d (e : unit) : int -> string = () ;;"))
     [
-      Let
-        ( false,
-          "a",
+      NonRecursiveBinding
+        ( "a",
           [
             ("b", None);
-            ("c", Some (TArrow (TProduct [ TInt; TString ], TUnit)));
+            ("c", Some (FunctionType (TupleType [ IntType; StringType ], UnitType)));
             ("d", None);
-            ("e", Some TUnit);
+            ("e", Some UnitType);
           ],
-          Some (TArrow (TInt, TString)),
-          ENil );
+          Some (FunctionType (IntType, StringType)),
+          UnitExpr );
     ];
   assert_equal
     (parse
@@ -172,24 +171,24 @@ let test_let_complex _ =
           "a",
           [
             ("b", None);
-            ("c", Some (TArrow (TProduct [ TInt; TString ], TUnit)));
+            ("c", Some (FunctionType (TupleType [ IntType; StringType ], UnitType)));
             ("d", None);
-            ("e", Some TUnit);
+            ("e", Some UnitType);
           ],
-          Some (TArrow (TInt, TString)),
-          ENil );
+          Some (FunctionType (IntType, StringType)),
+          UnitExpr );
     ]
 
 let test_simple_let_in _ =
   assert_equal
     (parse (tokenize "let a = let b = c in d ;;"))
     [
-      Let (false, "a", [], None, LetIn (false, "b", [], None, EId "c", EId "d"));
+      NonRecursiveBinding ("a", [], None, LetIn (false, "b", [], None, VarExpr "c", VarExpr "d"));
     ];
   assert_equal
     (parse (tokenize "let a = let rec b = c in d ;;"))
     [
-      Let (false, "a", [], None, LetIn (true, "b", [], None, EId "c", EId "d"));
+      NonRecursiveBinding ("a", [], None, LetIn (true, "b", [], None, VarExpr "c", VarExpr "d"));
     ]
 
 let test_typed_let_in_val _ =
@@ -197,13 +196,13 @@ let test_typed_let_in_val _ =
     (parse (tokenize "let a = let b : unit = () in c ;;"))
     [
       Let
-        (false, "a", [], None, LetIn (false, "b", [], Some TUnit, ENil, EId "c"));
+        (false, "a", [], None, LetIn (false, "b", [], Some UnitType, UnitExpr, VarExpr "c"));
     ];
   assert_equal
     (parse (tokenize "let a = let rec b : unit = () in c ;;"))
     [
       Let
-        (false, "a", [], None, LetIn (true, "b", [], Some TUnit, ENil, EId "c"));
+        (false, "a", [], None, LetIn (true, "b", [], Some UnitType, UnitExpr, VarExpr "c"));
     ]
 
 let test_let_in_untyped_param _ =
@@ -215,7 +214,7 @@ let test_let_in_untyped_param _ =
           "a",
           [],
           None,
-          LetIn (false, "b", [ ("c", None) ], None, ENil, EId "d") );
+          LetIn (false, "b", [ ("c", None) ], None, UnitExpr, VarExpr "d") );
     ];
   assert_equal
     (parse (tokenize "let a = let rec b c = () in d ;;"))
@@ -225,7 +224,7 @@ let test_let_in_untyped_param _ =
           "a",
           [],
           None,
-          LetIn (true, "b", [ ("c", None) ], None, ENil, EId "d") );
+          LetIn (true, "b", [ ("c", None) ], None, UnitExpr, VarExpr "d") );
     ]
 
 let test_let_in_typed_param _ =
@@ -237,7 +236,7 @@ let test_let_in_typed_param _ =
           "a",
           [],
           None,
-          LetIn (false, "b", [ ("c", Some TInt) ], None, ENil, EId "d") );
+          LetIn (false, "b", [ ("c", Some IntType) ], None, UnitExpr, VarExpr "d") );
     ];
   assert_equal
     (parse (tokenize "let a = let rec b (c : int) = () in d ;;"))
@@ -247,7 +246,7 @@ let test_let_in_typed_param _ =
           "a",
           [],
           None,
-          LetIn (true, "b", [ ("c", Some TInt) ], None, ENil, EId "d") );
+          LetIn (true, "b", [ ("c", Some IntType) ], None, UnitExpr, VarExpr "d") );
     ]
 
 let test_let_in_unty_params _ =
@@ -259,7 +258,7 @@ let test_let_in_unty_params _ =
           "a",
           [],
           None,
-          LetIn (false, "b", [ ("c", None); ("d", None) ], None, ENil, EId "e")
+          LetIn (false, "b", [ ("c", None); ("d", None) ], None, UnitExpr, VarExpr "e")
         );
     ];
   assert_equal
@@ -270,7 +269,7 @@ let test_let_in_unty_params _ =
           "a",
           [],
           None,
-          LetIn (true, "b", [ ("c", None); ("d", None) ], None, ENil, EId "e")
+          LetIn (true, "b", [ ("c", None); ("d", None) ], None, UnitExpr, VarExpr "e")
         );
     ]
 
@@ -287,10 +286,10 @@ let test_let_in_ty_params _ =
           LetIn
             ( false,
               "b",
-              [ ("c", Some TInt); ("d", Some (TArrow (TString, TBool))) ],
+              [ ("c", Some IntType); ("d", Some (FunctionType (StringType, BoolType))) ],
               None,
-              ENil,
-              EId "e" ) );
+              UnitExpr,
+              VarExpr "e" ) );
     ];
   assert_equal
     (parse
@@ -304,10 +303,10 @@ let test_let_in_ty_params _ =
           LetIn
             ( true,
               "b",
-              [ ("c", Some TInt); ("d", Some (TArrow (TString, TBool))) ],
+              [ ("c", Some IntType); ("d", Some (FunctionType (StringType, BoolType))) ],
               None,
-              ENil,
-              EId "e" ) );
+              UnitExpr,
+              VarExpr "e" ) );
     ]
 
 let test_let_in_complex_params _ =
@@ -324,14 +323,14 @@ let test_let_in_complex_params _ =
             ( false,
               "b",
               [
-                ("c", Some TString);
+                ("c", Some StringType);
                 ("d", None);
                 ("e", None);
-                ("f", Some (TProduct [ TUnit; TBool ]));
+                ("f", Some (TupleType [ UnitType; BoolType ]));
               ],
               None,
-              ENil,
-              EId "g" ) );
+              UnitExpr,
+              VarExpr "g" ) );
     ];
   assert_equal
     (parse
@@ -347,14 +346,14 @@ let test_let_in_complex_params _ =
             ( true,
               "b",
               [
-                ("c", Some TString);
+                ("c", Some StringType);
                 ("d", None);
                 ("e", None);
-                ("f", Some (TProduct [ TUnit; TBool ]));
+                ("f", Some (TupleType [ UnitType; BoolType ]));
               ],
               None,
-              ENil,
-              EId "g" ) );
+              UnitExpr,
+              VarExpr "g" ) );
     ]
 
 let test_let_in_complex _ =
@@ -372,14 +371,14 @@ let test_let_in_complex _ =
             ( false,
               "b",
               [
-                ("c", Some (TProduct [ TInt; TBool ]));
+                ("c", Some (TupleType [ IntType; BoolType ]));
                 ("d", None);
-                ("e", Some (TArrow (TUnit, TUnit)));
+                ("e", Some (FunctionType (UnitType, UnitType)));
                 ("f", None);
               ],
-              Some TString,
-              ENil,
-              EId "g" ) );
+              Some StringType,
+              UnitExpr,
+              VarExpr "g" ) );
     ];
   assert_equal
     (parse
@@ -395,14 +394,14 @@ let test_let_in_complex _ =
             ( true,
               "b",
               [
-                ("c", Some (TProduct [ TInt; TBool ]));
+                ("c", Some (TupleType [ IntType; BoolType ]));
                 ("d", None);
-                ("e", Some (TArrow (TUnit, TUnit)));
+                ("e", Some (FunctionType (UnitType, UnitType)));
                 ("f", None);
               ],
-              Some TString,
-              ENil,
-              EId "g" ) );
+              Some StringType,
+              UnitExpr,
+              VarExpr "g" ) );
     ]
 
 let test_nested_let_in_param _ =
@@ -419,8 +418,8 @@ let test_nested_let_in_param _ =
               "b",
               [],
               None,
-              LetIn (true, "c", [], None, ENil, EId "d"),
-              EId "e" ) );
+              LetIn (true, "c", [], None, UnitExpr, VarExpr "d"),
+              VarExpr "e" ) );
     ]
 
 let test_nested_let_in_value _ =
@@ -437,14 +436,14 @@ let test_nested_let_in_value _ =
               "b",
               [],
               None,
-              ENil,
-              LetIn (false, "c", [], None, ENil, EId "d") ) );
+              UnitExpr,
+              LetIn (false, "c", [], None, UnitExpr, VarExpr "d") ) );
     ]
 
 let test_simple_cond _ =
   assert_equal
     (parse (tokenize "let a = if b then c else d ;;"))
-    [ Let (false, "a", [], None, Cond (EId "b", EId "c", EId "d")) ]
+    [ NonRecursiveBinding ("a", [], None, IfExpr (VarExpr "b", VarExpr "c", VarExpr "d")) ]
 
 let test_nested_if_cond _ =
   assert_equal
@@ -455,7 +454,7 @@ let test_nested_if_cond _ =
           "a",
           [],
           None,
-          Cond (Cond (EId "b", EId "c", EId "d"), EId "e", EId "f") );
+          IfExpr (IfExpr (VarExpr "b", VarExpr "c", VarExpr "d"), VarExpr "e", VarExpr "f") );
     ]
 
 let test_nested_then_cond _ =
@@ -467,7 +466,7 @@ let test_nested_then_cond _ =
           "a",
           [],
           None,
-          Cond (EId "b", Cond (EId "c", EId "d", EId "e"), EId "f") );
+          IfExpr (VarExpr "b", IfExpr (VarExpr "c", VarExpr "d", VarExpr "e"), VarExpr "f") );
     ]
 
 let test_nested_else_cond _ =
@@ -479,7 +478,7 @@ let test_nested_else_cond _ =
           "a",
           [],
           None,
-          Cond (EId "b", EId "c", Cond (EId "d", EId "e", EId "f")) );
+          IfExpr (VarExpr "b", VarExpr "c", IfExpr (VarExpr "d", VarExpr "e", VarExpr "f")) );
     ]
 
 let test_super_nested_cond _ =
@@ -493,10 +492,10 @@ let test_super_nested_cond _ =
           "a",
           [],
           None,
-          Cond
-            ( Cond (EId "b", EId "c", EId "d"),
-              Cond (EId "e", EId "f", EId "g"),
-              Cond (EId "h", EId "i", EId "j") ) );
+          IfExpr
+            ( IfExpr (VarExpr "b", VarExpr "c", VarExpr "d"),
+              IfExpr (VarExpr "e", VarExpr "f", VarExpr "g"),
+              IfExpr (VarExpr "h", VarExpr "i", VarExpr "j") ) );
     ]
 
 (* Remember that nullary functions are illegal *)
@@ -507,17 +506,17 @@ let test_nullary_lambda _ =
 let test_simple_lambda _ =
   assert_equal
     (parse (tokenize "let a = fun x => () ;;"))
-    [ Let (false, "a", [], None, Lambda ([ ("x", None) ], None, ENil)) ]
+    [ NonRecursiveBinding ("a", [], None, FunDefExpr ([ ("x", None) ], None, UnitExpr)) ]
 
 let test_typed_lambda _ =
   assert_equal
     (parse (tokenize "let a = fun x : unit => () ;;"))
-    [ Let (false, "a", [], None, Lambda ([ ("x", None) ], Some TUnit, ENil)) ]
+    [ NonRecursiveBinding ("a", [], None, FunDefExpr ([ ("x", None) ], Some UnitType, UnitExpr)) ]
 
 let test_lambda_typed_param _ =
   assert_equal
     (parse (tokenize "let a = fun (x : int) => () ;;"))
-    [ Let (false, "a", [], None, Lambda ([ ("x", Some TInt) ], None, ENil)) ]
+    [ NonRecursiveBinding ("a", [], None, FunDefExpr ([ ("x", Some IntType) ], None, UnitExpr)) ]
 
 let test_lambda_unty_params _ =
   assert_equal
@@ -528,7 +527,7 @@ let test_lambda_unty_params _ =
           "a",
           [],
           None,
-          Lambda ([ ("x", None); ("y", None); ("z", None) ], None, ENil) );
+          FunDefExpr ([ ("x", None); ("y", None); ("z", None) ], None, UnitExpr) );
     ]
 
 let test_lambda_ty_params _ =
@@ -541,9 +540,9 @@ let test_lambda_ty_params _ =
           [],
           None,
           Lambda
-            ( [ ("x", Some (TArrow (TInt, TString))); ("y", Some TBool) ],
+            ( [ ("x", Some (FunctionType (IntType, StringType))); ("y", Some BoolType) ],
               None,
-              ENil ) );
+              UnitExpr ) );
     ]
 
 let test_lambda_complex_params _ =
@@ -557,13 +556,13 @@ let test_lambda_complex_params _ =
           None,
           Lambda
             ( [
-                ("w", Some TInt);
+                ("w", Some IntType);
                 ("x", None);
-                ("y", Some (TProduct [ TBool; TUnit ]));
+                ("y", Some (TupleType [ BoolType; UnitType ]));
                 ("z", None);
               ],
               None,
-              ENil ) );
+              UnitExpr ) );
     ]
 
 let test_lambda_complex _ =
@@ -581,11 +580,11 @@ let test_lambda_complex _ =
             ( [
                 ("w", None);
                 ("x", None);
-                ("y", Some (TProduct [ TUnit; TUnit ]));
-                ("z", Some (TArrow (TInt, TString)));
+                ("y", Some (TupleType [ UnitType; UnitType ]));
+                ("z", Some (FunctionType (IntType, StringType)));
               ],
-              Some TUnit,
-              ENil ) );
+              Some UnitType,
+              UnitExpr ) );
     ]
 
 let test_lambda_nested _ =
@@ -597,7 +596,7 @@ let test_lambda_nested _ =
           "a",
           [],
           None,
-          Lambda ([ ("x", None) ], None, Lambda ([ ("y", None) ], None, ENil))
+          FunDefExpr ([ ("x", None) ], None, FunDefExpr ([ ("y", None) ], None, UnitExpr))
         );
     ]
 
@@ -606,7 +605,7 @@ let test_lambda_nested _ =
 let test_simple_funcall _ =
   assert_equal
     (parse (tokenize "let a = b c ;;"))
-    [ Let (false, "a", [], None, Funcall (EId "b", EId "c")) ]
+    [ NonRecursiveBinding ("a", [], None, FunAppExpr(VarExpr "b", VarExpr "c")) ]
 
 let test_multiple_funcall _ =
   assert_equal
@@ -617,7 +616,7 @@ let test_multiple_funcall _ =
           "a",
           [],
           None,
-          Funcall (Funcall (Funcall (EId "b", EId "c"), EId "d"), EId "e") );
+          FunAppExpr(FunAppExpr(FunAppExpr(VarExpr "b", VarExpr "c"), VarExpr "d"), VarExpr "e") );
     ]
 
 let test_nested_funcall _ =
@@ -629,7 +628,7 @@ let test_nested_funcall _ =
           "a",
           [],
           None,
-          Funcall (Funcall (EId "b", EId "c"), Funcall (EId "d", EId "e")) );
+          FunAppExpr(FunAppExpr(VarExpr "b", VarExpr "c"), FunAppExpr(VarExpr "d", VarExpr "e")) );
     ]
 
 let test_funcall_fun _ =
@@ -641,13 +640,13 @@ let test_funcall_fun _ =
           "a",
           [],
           None,
-          Funcall (Lambda ([ ("x", None) ], None, ENil), EId "y") );
+          FunAppExpr(FunDefExpr ([ ("x", None) ], None, UnitExpr), VarExpr "y") );
     ]
 
 let test_simple_tuple _ =
   assert_equal
     (parse (tokenize "let a = (b, c) ;;"))
-    [ Let (false, "a", [], None, Tuple [ EId "b"; EId "c" ]) ]
+    [ NonRecursiveBinding ("a", [], None, TupleExpr[ VarExpr "b"; VarExpr "c" ]) ]
 
 let test_long_tuple _ =
   assert_equal
@@ -658,7 +657,7 @@ let test_long_tuple _ =
           "a",
           [],
           None,
-          Tuple [ EId "b"; EId "c"; EId "d"; EId "e"; EId "f"; EId "g" ] );
+          TupleExpr[ VarExpr "b"; VarExpr "c"; VarExpr "d"; VarExpr "e"; VarExpr "f"; VarExpr "g" ] );
     ]
 
 let test_nested_tuple _ =
@@ -672,9 +671,9 @@ let test_nested_tuple _ =
           None,
           Tuple
             [
-              Tuple [ EId "b"; EId "c" ];
-              EId "d";
-              Tuple [ Tuple [ EId "e"; EId "f"; EId "g" ]; EId "h" ];
+              TupleExpr[ VarExpr "b"; VarExpr "c" ];
+              VarExpr "d";
+              TupleExpr[ TupleExpr[ VarExpr "e"; VarExpr "f"; VarExpr "g" ]; VarExpr "h" ];
             ] );
     ]
 
@@ -682,7 +681,7 @@ let test_tuple_funcall _ =
   assert_equal
     (parse (tokenize "let a = (b c, d) ;;"))
     [
-      Let (false, "a", [], None, Tuple [ Funcall (EId "b", EId "c"); EId "d" ]);
+      NonRecursiveBinding ("a", [], None, TupleExpr[ FunAppExpr(VarExpr "b", VarExpr "c"); VarExpr "d" ]);
     ]
 
 let test_let_in_tuple _ =
@@ -696,8 +695,8 @@ let test_let_in_tuple _ =
           None,
           Tuple
             [
-              LetIn (false, "b", [], None, ENil, EId "c");
-              LetIn (true, "d", [], None, ENil, EId "f");
+              LetIn (false, "b", [], None, UnitExpr, VarExpr "c");
+              LetIn (true, "d", [], None, UnitExpr, VarExpr "f");
             ] );
     ]
 
@@ -712,20 +711,20 @@ let test_lambda_tuple _ =
           None,
           Tuple
             [
-              Lambda ([ ("x", None) ], None, ENil);
-              Lambda ([ ("y", None) ], None, EId "y");
+              FunDefExpr ([ ("x", None) ], None, UnitExpr);
+              FunDefExpr ([ ("y", None) ], None, VarExpr "y");
             ] );
     ]
 
 let test_tuple_in_paren _ =
   assert_equal
     (parse (tokenize "let a = ((b, c)) ;;"))
-    [ Let (false, "a", [], None, Tuple [ EId "b"; EId "c" ]) ]
+    [ NonRecursiveBinding ("a", [], None, TupleExpr[ VarExpr "b"; VarExpr "c" ]) ]
 
 let test_basic_addition _ =
   assert_equal
     (parse (tokenize "let a = b + c ;;"))
-    [ Let (false, "a", [], None, BinOp (BPlus, EId "b", EId "c")) ]
+    [ NonRecursiveBinding ("a", [], None, BinopExpr (BPlus, VarExpr "b", VarExpr "c")) ]
 
 let test_addition_assoc _ =
   assert_equal
@@ -736,13 +735,13 @@ let test_addition_assoc _ =
           "a",
           [],
           None,
-          BinOp (BPlus, BinOp (BPlus, EId "b", EId "c"), EId "d") );
+          BinopExpr (BPlus, BinopExpr (BPlus, VarExpr "b", VarExpr "c"), VarExpr "d") );
     ]
 
 let test_basic_subtraction _ =
   assert_equal
     (parse (tokenize "let a = b - c ;;"))
-    [ Let (false, "a", [], None, BinOp (BMinus, EId "b", EId "c")) ]
+    [ NonRecursiveBinding ("a", [], None, BinopExpr (BMinus, VarExpr "b", VarExpr "c")) ]
 
 let test_subtraction_assoc _ =
   assert_equal
@@ -753,7 +752,7 @@ let test_subtraction_assoc _ =
           "a",
           [],
           None,
-          BinOp (BMinus, BinOp (BMinus, EId "b", EId "c"), EId "d") );
+          BinopExpr (BMinus, BinopExpr (BMinus, VarExpr "b", VarExpr "c"), VarExpr "d") );
     ]
 
 let test_mixed_add_sub _ =
@@ -765,16 +764,16 @@ let test_mixed_add_sub _ =
           "a",
           [],
           None,
-          BinOp
+          BinopExpr
             ( BPlus,
-              BinOp (BMinus, BinOp (BPlus, EId "b", EId "c"), EId "d"),
-              EId "e" ) );
+              BinopExpr (BMinus, BinopExpr (BPlus, VarExpr "b", VarExpr "c"), VarExpr "d"),
+              VarExpr "e" ) );
     ]
 
 let test_basic_multiplication _ =
   assert_equal
     (parse (tokenize "let a = b * c ;;"))
-    [ Let (false, "a", [], None, BinOp (BTimes, EId "b", EId "c")) ]
+    [ NonRecursiveBinding ("a", [], None, BinopExpr (BTimes, VarExpr "b", VarExpr "c")) ]
 
 let test_mult_assoc _ =
   assert_equal
@@ -785,13 +784,13 @@ let test_mult_assoc _ =
           "a",
           [],
           None,
-          BinOp (BTimes, BinOp (BTimes, EId "b", EId "c"), EId "d") );
+          BinopExpr (BTimes, BinopExpr (BTimes, VarExpr "b", VarExpr "c"), VarExpr "d") );
     ]
 
 let test_basic_division _ =
   assert_equal
     (parse (tokenize "let a = b / c ;;"))
-    [ Let (false, "a", [], None, BinOp (BDiv, EId "b", EId "c")) ]
+    [ NonRecursiveBinding ("a", [], None, BinopExpr (BDiv, VarExpr "b", VarExpr "c")) ]
 
 let test_mixed_mult_div _ =
   assert_equal
@@ -802,10 +801,10 @@ let test_mixed_mult_div _ =
           "a",
           [],
           None,
-          BinOp
+          BinopExpr
             ( BMod,
-              BinOp (BDiv, BinOp (BTimes, EId "b", EId "c"), EId "d"),
-              EId "e" ) );
+              BinopExpr (BDiv, BinopExpr (BTimes, VarExpr "b", VarExpr "c"), VarExpr "d"),
+              VarExpr "e" ) );
     ]
 
 let test_div_assoc _ =
@@ -817,13 +816,13 @@ let test_div_assoc _ =
           "a",
           [],
           None,
-          BinOp (BDiv, BinOp (BDiv, EId "b", EId "c"), EId "d") );
+          BinopExpr (BDiv, BinopExpr (BDiv, VarExpr "b", VarExpr "c"), VarExpr "d") );
     ]
 
 let test_basic_modulo _ =
   assert_equal
     (parse (tokenize "let a = b mod c ;;"))
-    [ Let (false, "a", [], None, BinOp (BMod, EId "b", EId "c")) ]
+    [ NonRecursiveBinding ("a", [], None, BinopExpr (BMod, VarExpr "b", VarExpr "c")) ]
 
 let test_mod_assoc _ =
   assert_equal
@@ -834,23 +833,23 @@ let test_mod_assoc _ =
           "a",
           [],
           None,
-          BinOp (BMod, BinOp (BMod, EId "b", EId "c"), EId "d") );
+          BinopExpr (BMod, BinopExpr (BMod, VarExpr "b", VarExpr "c"), VarExpr "d") );
     ]
 
 let test_simple_uminus _ =
   assert_equal
     (parse (tokenize "let a = ~b ;;"))
-    [ Let (false, "a", [], None, UnOp (UBitNot, EId "b")) ]
+    [ NonRecursiveBinding ("a", [], None, UnopExpr (UBitNot, VarExpr "b")) ]
 
 let test_nested_uminus _ =
   assert_equal
     (parse (tokenize "let a = ~~b ;;"))
-    [ Let (false, "a", [], None, UnOp (UBitNot, UnOp (UBitNot, EId "b"))) ]
+    [ NonRecursiveBinding ("a", [], None, UnopExpr (UBitNot, UnopExpr (UBitNot, VarExpr "b"))) ]
 
 let test_uminus_funcall _ =
   assert_equal
     (parse (tokenize "let a = ~b c ;;"))
-    [ Let (false, "a", [], None, UnOp (UBitNot, Funcall (EId "b", EId "c"))) ]
+    [ NonRecursiveBinding ("a", [], None, UnopExpr (UBitNot, FunAppExpr(VarExpr "b", VarExpr "c"))) ]
 
 let test_complex_arithmetic _ =
   assert_equal
@@ -861,32 +860,32 @@ let test_complex_arithmetic _ =
           "a",
           [],
           None,
-          BinOp
+          BinopExpr
             ( BMinus,
-              BinOp
+              BinopExpr
                 ( BPlus,
-                  BinOp (BTimes, EId "b", EId "c"),
-                  BinOp
+                  BinopExpr (BTimes, VarExpr "b", VarExpr "c"),
+                  BinopExpr
                     ( BDiv,
-                      BinOp (BMod, EId "d", EId "e"),
-                      UnOp (UBitNot, EId "f") ) ),
-              EId "g" ) );
+                      BinopExpr (BMod, VarExpr "d", VarExpr "e"),
+                      UnopExpr (UBitNot, VarExpr "f") ) ),
+              VarExpr "g" ) );
     ]
 
 let test_basic_lt _ =
   assert_equal
     (parse (tokenize "let a = b < c ;;"))
-    [ Let (false, "a", [], None, BinOp (BLessThan, EId "b", EId "c")) ]
+    [ NonRecursiveBinding ("a", [], None, BinopExpr (BLessThan, VarExpr "b", VarExpr "c")) ]
 
 let test_basic_eq _ =
   assert_equal
     (parse (tokenize "let a = b = c ;;"))
-    [ Let (false, "a", [], None, BinOp (BEquals, EId "b", EId "c")) ]
+    [ NonRecursiveBinding ("a", [], None, BinopExpr (BEquals, VarExpr "b", VarExpr "c")) ]
 
 let test_basic_concat _ =
   assert_equal
     (parse (tokenize "let a = b ^ c ;;"))
-    [ Let (false, "a", [], None, BinOp (BConcat, EId "b", EId "c")) ]
+    [ NonRecursiveBinding ("a", [], None, BinopExpr (BConcat, VarExpr "b", VarExpr "c")) ]
 
 let test_concat_assoc _ =
   assert_equal
@@ -897,7 +896,7 @@ let test_concat_assoc _ =
           "a",
           [],
           None,
-          BinOp (BConcat, BinOp (BConcat, EId "b", EId "c"), EId "d") );
+          BinopExpr (BConcat, BinopExpr (BConcat, VarExpr "b", VarExpr "c"), VarExpr "d") );
     ]
 
 (* TODO: Mix < and = with &&, || *)
@@ -905,7 +904,7 @@ let test_concat_assoc _ =
 let test_basic_logand _ =
   assert_equal
     (parse (tokenize "let a = b && c ;;"))
-    [ Let (false, "a", [], None, BinOp (BLogAnd, EId "b", EId "c")) ]
+    [ NonRecursiveBinding ("a", [], None, BinopExpr (BLogAnd, VarExpr "b", VarExpr "c")) ]
 
 let test_logand_assoc _ =
   assert_equal
@@ -916,13 +915,13 @@ let test_logand_assoc _ =
           "a",
           [],
           None,
-          BinOp (BLogAnd, BinOp (BLogAnd, EId "b", EId "c"), EId "d") );
+          BinopExpr (BLogAnd, BinopExpr (BLogAnd, VarExpr "b", VarExpr "c"), VarExpr "d") );
     ]
 
 let test_basic_logor _ =
   assert_equal
     (parse (tokenize "let a = b || c ;;"))
-    [ Let (false, "a", [], None, BinOp (BLogOr, EId "b", EId "c")) ]
+    [ NonRecursiveBinding ("a", [], None, BinopExpr (BLogOr, VarExpr "b", VarExpr "c")) ]
 
 let test_logor_assoc _ =
   assert_equal
@@ -933,7 +932,7 @@ let test_logor_assoc _ =
           "a",
           [],
           None,
-          BinOp (BLogOr, BinOp (BLogOr, EId "b", EId "c"), EId "d") );
+          BinopExpr (BLogOr, BinopExpr (BLogOr, VarExpr "b", VarExpr "c"), VarExpr "d") );
     ]
 
 let test_bool_precedence _ =
@@ -945,7 +944,7 @@ let test_bool_precedence _ =
           "a",
           [],
           None,
-          BinOp (BLogOr, EId "b", BinOp (BLogAnd, EId "c", EId "d")) );
+          BinopExpr (BLogOr, VarExpr "b", BinopExpr (BLogAnd, VarExpr "c", VarExpr "d")) );
     ];
   assert_equal
     (parse (tokenize "let a = b && c || d ;;"))
@@ -955,13 +954,13 @@ let test_bool_precedence _ =
           "a",
           [],
           None,
-          BinOp (BLogOr, BinOp (BLogAnd, EId "b", EId "c"), EId "d") );
+          BinopExpr (BLogOr, BinopExpr (BLogAnd, VarExpr "b", VarExpr "c"), VarExpr "d") );
     ]
 
 let test_simple_lognot _ =
   assert_equal
     (parse (tokenize "let a = not b ;;"))
-    [ Let (false, "a", [], None, UnOp (ULogNot, EId "b")) ]
+    [ NonRecursiveBinding ("a", [], None, UnopExpr (ULogNot, VarExpr "b")) ]
 
 let test_nested_lognot _ =
   assert_equal
@@ -972,7 +971,7 @@ let test_nested_lognot _ =
           "a",
           [],
           None,
-          UnOp (ULogNot, UnOp (ULogNot, UnOp (ULogNot, EId "b"))) );
+          UnopExpr (ULogNot, UnopExpr (ULogNot, UnopExpr (ULogNot, VarExpr "b"))) );
     ]
 
 let test_lognot_precedence _ =
@@ -984,7 +983,7 @@ let test_lognot_precedence _ =
           "a",
           [],
           None,
-          BinOp (BLogOr, UnOp (ULogNot, EId "b"), UnOp (ULogNot, EId "c")) );
+          BinopExpr (BLogOr, UnopExpr (ULogNot, VarExpr "b"), UnopExpr (ULogNot, VarExpr "c")) );
     ];
   assert_equal
     (parse (tokenize "let a = not b && not c ;;"))
@@ -994,7 +993,7 @@ let test_lognot_precedence _ =
           "a",
           [],
           None,
-          BinOp (BLogAnd, UnOp (ULogNot, EId "b"), UnOp (ULogNot, EId "c")) );
+          BinopExpr (BLogAnd, UnopExpr (ULogNot, VarExpr "b"), UnopExpr (ULogNot, VarExpr "c")) );
     ]
 
 (* NOTE: This is not valid OCaml syntax (where `not` is treated as a normal
@@ -1002,7 +1001,7 @@ let test_lognot_precedence _ =
 let test_lognot_funcall _ =
   assert_equal
     (parse (tokenize "let a = not b c ;;"))
-    [ Let (false, "a", [], None, UnOp (ULogNot, Funcall (EId "b", EId "c"))) ]
+    [ NonRecursiveBinding ("a", [], None, UnopExpr (ULogNot, FunAppExpr(VarExpr "b", VarExpr "c"))) ]
 
 let test_complex_log_ops _ =
   assert_equal
@@ -1013,22 +1012,22 @@ let test_complex_log_ops _ =
           "a",
           [],
           None,
-          BinOp
+          BinopExpr
             ( BLogOr,
-              BinOp
+              BinopExpr
                 ( BLogOr,
-                  BinOp
+                  BinopExpr
                     ( BLogOr,
-                      EId "b",
-                      BinOp
+                      VarExpr "b",
+                      BinopExpr
                         ( BLogAnd,
-                          BinOp
+                          BinopExpr
                             ( BLogAnd,
-                              UnOp (ULogNot, EId "c"),
-                              UnOp (ULogNot, EId "d") ),
-                          EId "e" ) ),
-                  EId "f" ),
-              EId "g" ) );
+                              UnopExpr (ULogNot, VarExpr "c"),
+                              UnopExpr (ULogNot, VarExpr "d") ),
+                          VarExpr "e" ) ),
+                  VarExpr "f" ),
+              VarExpr "g" ) );
     ]
 
 let test_cmp_with_log _ =
@@ -1040,13 +1039,13 @@ let test_cmp_with_log _ =
           "a",
           [],
           None,
-          BinOp
+          BinopExpr
             ( BLogOr,
-              BinOp
+              BinopExpr
                 ( BLogOr,
-                  BinOp (BLogAnd, EId "b", BinOp (BLessThan, EId "c", EId "d")),
-                  BinOp (BEquals, EId "e", EId "f") ),
-              EId "g" ) );
+                  BinopExpr (BLogAnd, VarExpr "b", BinopExpr (BLessThan, VarExpr "c", VarExpr "d")),
+                  BinopExpr (BEquals, VarExpr "e", VarExpr "f") ),
+              VarExpr "g" ) );
     ]
 
 let test_numbers _ =
@@ -1054,7 +1053,7 @@ let test_numbers _ =
     (fun x ->
       assert_equal
         (parse (tokenize ("let a = " ^ string_of_int x ^ " ;;")))
-        [ Let (false, "a", [], None, EInt x) ])
+        [ NonRecursiveBinding ("a", [], None, IntLiteralExpr x) ])
     (range_inc 1 20)
 
 let test_bools _ =
@@ -1062,18 +1061,18 @@ let test_bools _ =
     (fun x ->
       assert_equal
         (parse (tokenize ("let a = " ^ string_of_bool x ^ " ;;")))
-        [ Let (false, "a", [], None, EBool x) ])
+        [ NonRecursiveBinding ("a", [], None, BoolLiteralExpr x) ])
     [ true; false ]
 
 let test_strings _ =
   assert_equal
     (parse (tokenize "let a = \"abc\" ;;"))
-    [ Let (false, "a", [], None, EStr "abc") ]
+    [ NonRecursiveBinding ("a", [], None, StringLiteralExpr "abc") ]
 
 let test_simple_match _ =
   assert_equal
     (parse (tokenize "let a = match b with | c => d ;;"))
-    [ Let (false, "a", [], None, EMatch (EId "b", [ ("c", None, EId "d") ])) ]
+    [ NonRecursiveBinding ("a", [], None, EMatch (VarExpr "b", [ ("c", None, VarExpr "d") ])) ]
 
 let test_multiarm_match _ =
   assert_equal
@@ -1084,7 +1083,7 @@ let test_multiarm_match _ =
           "a",
           [],
           None,
-          EMatch (EId "b", [ ("c", None, EId "d"); ("e", None, EId "f") ]) );
+          EMatch (VarExpr "b", [ ("c", None, VarExpr "d"); ("e", None, VarExpr "f") ]) );
     ]
 
 let test_simple_match_pat _ =
@@ -1096,7 +1095,7 @@ let test_simple_match_pat _ =
           "a",
           [],
           None,
-          EMatch (EId "b", [ ("c", Some (BarePat "d"), EId "e") ]) );
+          EMatch (VarExpr "b", [ ("c", Some (BarePat "d"), VarExpr "e") ]) );
     ]
 
 let test_tuple_match_pat _ =
@@ -1108,7 +1107,7 @@ let test_tuple_match_pat _ =
           "a",
           [],
           None,
-          EMatch (EId "b", [ ("c", Some (TuplePat [ "d"; "e" ]), EId "f") ]) );
+          EMatch (VarExpr "b", [ ("c", Some (TuplePat [ "d"; "e" ]), VarExpr "f") ]) );
     ]
 
 let test_long_tuple_match _ =
@@ -1121,7 +1120,7 @@ let test_long_tuple_match _ =
           [],
           None,
           EMatch
-            (EId "b", [ ("c", Some (TuplePat [ "d"; "e"; "f"; "g" ]), EId "h") ])
+            (VarExpr "b", [ ("c", Some (TuplePat [ "d"; "e"; "f"; "g" ]), VarExpr "h") ])
         );
     ]
 
@@ -1136,10 +1135,10 @@ let test_multi_tup_match _ =
           [],
           None,
           EMatch
-            ( EId "b",
+            ( VarExpr "b",
               [
-                ("c", Some (TuplePat [ "d"; "e" ]), EId "f");
-                ("g", Some (TuplePat [ "h"; "i"; "j" ]), EId "k");
+                ("c", Some (TuplePat [ "d"; "e" ]), VarExpr "f");
+                ("g", Some (TuplePat [ "h"; "i"; "j" ]), VarExpr "k");
               ] ) );
     ]
 
@@ -1155,12 +1154,12 @@ let test_complex_match_arms _ =
           [],
           None,
           EMatch
-            ( EId "b",
+            ( VarExpr "b",
               [
-                ("c", Some (TuplePat [ "d"; "e"; "f" ]), EId "g");
-                ("h", None, EId "i");
-                ("j", Some (BarePat "k"), EId "l");
-                ("m", None, EId "n");
+                ("c", Some (TuplePat [ "d"; "e"; "f" ]), VarExpr "g");
+                ("h", None, VarExpr "i");
+                ("j", Some (BarePat "k"), VarExpr "l");
+                ("m", None, VarExpr "n");
               ] ) );
     ]
 
@@ -1174,8 +1173,8 @@ let test_nested_match_param _ =
           [],
           None,
           EMatch
-            ( EMatch (EId "b", [ ("c", None, EId "d") ]),
-              [ ("e", None, EId "f") ] ) );
+            ( EMatch (VarExpr "b", [ ("c", None, VarExpr "d") ]),
+              [ ("e", None, VarExpr "f") ] ) );
     ]
 
 let test_match_in_match_arm _ =
@@ -1189,12 +1188,12 @@ let test_match_in_match_arm _ =
           [],
           None,
           EMatch
-            ( EId "b",
+            ( VarExpr "b",
               [
                 ( "c",
                   None,
                   EMatch
-                    (EId "d", [ ("e", None, EId "f"); ("g", None, EId "h") ]) );
+                    (VarExpr "d", [ ("e", None, VarExpr "f"); ("g", None, VarExpr "h") ]) );
               ] ) );
     ]
 
@@ -1209,16 +1208,16 @@ let test_factorial _ =
           "fact",
           [ ("n", None) ],
           None,
-          Cond
-            ( BinOp
+          IfExpr
+            ( BinopExpr
                 ( BLogOr,
-                  BinOp (BEquals, EId "n", EInt 0),
-                  BinOp (BEquals, EId "n", EInt 1) ),
-              EInt 1,
-              BinOp
+                  BinopExpr (BEquals, VarExpr "n", IntLiteralExpr 0),
+                  BinopExpr (BEquals, VarExpr "n", IntLiteralExpr 1) ),
+              IntLiteralExpr 1,
+              BinopExpr
                 ( BPlus,
-                  Funcall (EId "fact", BinOp (BMinus, EId "n", EInt 1)),
-                  Funcall (EId "fact", BinOp (BMinus, EId "n", EInt 2)) ) ) );
+                  FunAppExpr(VarExpr "fact", BinopExpr (BMinus, VarExpr "n", IntLiteralExpr 1)),
+                  FunAppExpr(VarExpr "fact", BinopExpr (BMinus, VarExpr "n", IntLiteralExpr 2)) ) ) );
     ]
 
 let test_list_len _ =
@@ -1229,9 +1228,9 @@ let test_list_len _ =
          ^ "let rec len l = match l with | Nil => 0 | Val (_, rest) => 1 + len rest ;;"
           )))
     [
-      TyDecl
+      TypeDefBinding
         ( "int_list",
-          [ ("Nil", None); ("Val", Some (TProduct [ TInt; TId "int_list" ])) ]
+          [ ("Nil", None); ("Val", Some (TupleType [ IntType; UserDeclaredType "int_list" ])) ]
         );
       Let
         ( true,
@@ -1239,19 +1238,19 @@ let test_list_len _ =
           [ ("l", None) ],
           None,
           EMatch
-            ( EId "l",
+            ( VarExpr "l",
               [
-                ("Nil", None, EInt 0);
+                ("Nil", None, IntLiteralExpr 0);
                 ( "Val",
                   Some (TuplePat [ "_"; "rest" ]),
-                  BinOp (BPlus, EInt 1, Funcall (EId "len", EId "rest")) );
+                  BinopExpr (BPlus, IntLiteralExpr 1, FunAppExpr(VarExpr "len", VarExpr "rest")) );
               ] ) );
     ]
 
 let test_nil_comment _ =
   assert_equal
     (parse (tokenize "let a = ((**)) ;;"))
-    [ Let (false, "a", [], None, ENil) ]
+    [ NonRecursiveBinding ("a", [], None, UnitExpr) ]
 
 let test_parenthetopia _ =
   assert_equal
@@ -1266,12 +1265,12 @@ let test_parenthetopia _ =
           Funcall
             ( Funcall
                 ( Funcall
-                    ( ENil,
+                    ( UnitExpr,
                       Funcall
-                        ( Funcall (ENil, ENil),
-                          Funcall (Funcall (ENil, ENil), ENil) ) ),
-                  ENil ),
-              ENil ) );
+                        ( FunAppExpr(UnitExpr, UnitExpr),
+                          FunAppExpr(FunAppExpr(UnitExpr, UnitExpr), UnitExpr) ) ),
+                  UnitExpr ),
+              UnitExpr ) );
     ]
 
 let test_loss_expr _ =
@@ -1284,12 +1283,12 @@ let test_loss_expr _ =
           [],
           None,
           EMatch
-            ( EId "b",
+            ( VarExpr "b",
               [
                 ( "c",
                   None,
-                  BinOp (BLogOr, BinOp (BLogOr, EId "d", EId "e"), EId "f") );
-                ("_", None, EId "g");
+                  BinopExpr (BLogOr, BinopExpr (BLogOr, VarExpr "d", VarExpr "e"), VarExpr "f") );
+                ("_", None, VarExpr "g");
               ] ) );
     ]
 
@@ -1298,7 +1297,7 @@ let test_loss_expr _ =
 (* Horribly-nested match/if/let statements *)
 
 let basic_types =
-  [ (TNInt, TInt); (TNBool, TBool); (TNString, TString); (TNUnit, TUnit) ]
+  [ (TNInt, IntType); (TNBool, BoolType); (TNString, StringType); (TNUnit, UnitType) ]
 
 let basic_tys = List.map snd basic_types
 let basic_tynames = List.map fst basic_types
@@ -1310,23 +1309,23 @@ let print_parse_ty_result : ty * token list -> string = function
 let test_type_basic _ =
   assert_equal
     (parse_ty (tokenize "int"))
-    (TInt, []) ~printer:print_parse_ty_result;
+    (IntType, []) ~printer:print_parse_ty_result;
   assert_equal
     (parse_ty (tokenize "bool"))
-    (TBool, []) ~printer:print_parse_ty_result;
+    (BoolType, []) ~printer:print_parse_ty_result;
   assert_equal
     (parse_ty (tokenize "string"))
-    (TString, []) ~printer:print_parse_ty_result;
+    (StringType, []) ~printer:print_parse_ty_result;
   assert_equal
     (parse_ty (tokenize "unit"))
-    (TUnit, []) ~printer:print_parse_ty_result
+    (UnitType, []) ~printer:print_parse_ty_result
 
 let test_type_arrow _ =
   List.iter
     (fun ((tn, t), (un, u)) ->
       assert_equal
         (parse_ty [ tn; Arrow; un ])
-        (TArrow (t, u), [])
+        (FunctionType (t, u), [])
         ~printer:print_parse_ty_result)
     (cartesian basic_types basic_types)
 
@@ -1335,47 +1334,47 @@ let test_type_product _ =
     (fun ((tn, t), (un, u)) ->
       assert_equal
         (parse_ty [ tn; Times; un ])
-        (TProduct [ t; u ], [])
+        (TupleType [ t; u ], [])
         ~printer:print_parse_ty_result)
     (cartesian basic_types basic_types)
 
 let test_associative_arrow _ =
   assert_equal
     (parse_ty (tokenize "a -> b -> c"))
-    (TArrow (TId "a", TArrow (TId "b", TId "c")), [])
+    (FunctionType (UserDeclaredType "a", FunctionType (UserDeclaredType "b", UserDeclaredType "c")), [])
     ~printer:print_parse_ty_result
 
 let test_associative_prod _ =
   assert_equal
     (parse_ty (tokenize "a * b * c"))
-    (TProduct [ TId "a"; TId "b"; TId "c" ], [])
+    (TupleType [ UserDeclaredType "a"; UserDeclaredType "b"; UserDeclaredType "c" ], [])
     ~printer:print_parse_ty_result
 
 let test_type_precedence _ =
   assert_equal
     (parse_ty (tokenize "a -> b * c"))
-    (TArrow (TId "a", TProduct [ TId "b"; TId "c" ]), [])
+    (FunctionType (UserDeclaredType "a", TupleType [ UserDeclaredType "b"; UserDeclaredType "c" ]), [])
     ~printer:print_parse_ty_result;
   assert_equal
     (parse_ty (tokenize "a * b -> c"))
-    (TArrow (TProduct [ TId "a"; TId "b" ], TId "c"), [])
+    (FunctionType (TupleType [ UserDeclaredType "a"; UserDeclaredType "b" ], UserDeclaredType "c"), [])
     ~printer:print_parse_ty_result
 
 let test_long_type_precedence _ =
   assert_equal
     (parse_ty (tokenize "a * b * c -> d * e -> f * g * h"))
-    ( TArrow
-        ( TProduct [ TId "a"; TId "b"; TId "c" ],
-          TArrow
-            ( TProduct [ TId "d"; TId "e" ],
-              TProduct [ TId "f"; TId "g"; TId "h" ] ) ),
+    ( FunctionType
+        ( TupleType [ UserDeclaredType "a"; UserDeclaredType "b"; UserDeclaredType "c" ],
+          FunctionType
+            ( TupleType [ UserDeclaredType "d"; UserDeclaredType "e" ],
+              TupleType [ UserDeclaredType "f"; UserDeclaredType "g"; UserDeclaredType "h" ] ) ),
       [] )
     ~printer:print_parse_ty_result
 
 let test_type_parens _ =
   assert_equal
     (parse_ty (tokenize "(a -> b) * (c -> d)"))
-    (TProduct [ TArrow (TId "a", TId "b"); TArrow (TId "c", TId "d") ], [])
+    (TupleType [ FunctionType (UserDeclaredType "a", UserDeclaredType "b"); FunctionType (UserDeclaredType "c", UserDeclaredType "d") ], [])
     ~printer:print_parse_ty_result
 
 let test_nil_not_type _ =
@@ -1387,7 +1386,7 @@ let test_nil_not_type _ =
 let test_lispified_types _ =
   assert_equal
     (parse_ty (tokenize "((((((((a))))))))"))
-    (TId "a", []) ~printer:print_parse_ty_result
+    (UserDeclaredType "a", []) ~printer:print_parse_ty_result
 
 let parse_tests =
   "test suite for parser"
