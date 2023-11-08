@@ -231,6 +231,16 @@ let parse_tests = "parser tests" >::: [
     (Program ([TypeDefBinding ("t", [("A", Some(FunctionType (FunctionType (UnitType, StringType), BoolType)))])]))
     (parse (tokenize "type t = | A of (unit -> string) -> bool;;"))
   ~printer:(string_of_program 0));
+  "overriding let associativity" >::
+  (fun _ -> assert_equal
+    (Program ([NonRecursiveBinding ("x", [], None, BinopExpr (LetExpr ("y", [], None, IntLiteralExpr 1, VarExpr "y"), Plus, IntLiteralExpr 2))]))
+    (parse (tokenize "let x = (let y = 1 in y) + 2;;"))
+  ~printer:(string_of_program 0));
+  "basic single rec binding" >::
+  (fun _ -> assert_equal
+    (Program ([RecursiveBinding ("x", [], None, IntLiteralExpr (1))]))
+    (parse (tokenize "let rec x = 1;;"))
+  ~printer:(string_of_program 0));
 
   (* "example test" >::
   (fun _ -> assert_equal

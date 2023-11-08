@@ -24,7 +24,7 @@ and parse_binding (lst: token list): binding * token list =
   | Type :: _ -> parse_type_binding lst
   | x :: _ -> raise (ParseError ("Expected binding, got " ^ tok_to_str x))
   | [] -> failwith "There must be at least one binding"
-and parse_let_binding_common (x: string) (r: token list): binding * token list =
+and parse_let_binding_common (r: token list): param list * typ option * expr * token list =
   let rec help (rr: param list) (toks: token list): param list * token list =
     match toks with
     | Colon :: _ | Eq :: _ -> (rr, toks)
@@ -46,21 +46,23 @@ and parse_let_binding_common (x: string) (r: token list): binding * token list =
           (match r4 with
           | Eq :: r5 ->
             let (e, rest) = parse_expr r5 in
-              (NonRecursiveBinding (x, params, Some(t), e), rest)
+              (params, Some(t), e, rest)
           | x :: _ -> raise (ParseError ("Expected `=`, got " ^ tok_to_str x))
           | [] -> raise (ParseError ("Expected `=`, got end of input")))
       | Eq :: r3 ->
         let (e, rest) = parse_expr r3 in
-          (NonRecursiveBinding (x, params, None, e), rest)
+          (params, None, e, rest)
       | x :: _ -> raise (ParseError ("Expected either `:` or `=`, got " ^ tok_to_str x))
       | [] -> raise (ParseError ("Expected either `:` or `=`, got end of input"))
 and parse_nonrec_binding (lst: token list): binding * token list =
   match lst with
-  | Let :: Id x :: r -> parse_let_binding_common x r
+  | Let :: Id x :: r -> let (params, ty, ex, rest) = parse_let_binding_common r in
+    (NonRecursiveBinding (x, params, ty, ex), rest)
   | _ -> failwith "Unreachable"
 and parse_rec_binding (lst: token list): binding * token list =
   match lst with
-  | Let :: Rec :: Id x :: r -> parse_let_binding_common x r
+  | Let :: Rec :: Id x :: r -> let (params, ty, ex, rest) = parse_let_binding_common r in
+    (RecursiveBinding (x, params, ty, ex), rest)
   | _ -> failwith "Unreachable"
 and parse_type_binding (lst: token list): binding * token list =
   match lst with
@@ -212,8 +214,22 @@ and parse_expr (lst: token list): expr * token list =
     (* | [] -> raise (ParseError "Expected <int> or (, got end of input") *)
     (* | t :: _ -> raise (ParseError ("Expected <int> or (, got " ^ tok_to_str t)) *)
     match s with
-    (* |  *)
-    (* expr in parens *)
+    | Let :: Id x :: r -> let (params, ty, ex, r2) = parse_let_binding_common r in
+      (match r2 with
+        | In :: r3 ->
+            let (body, rest) = parse_expr_toplevel r3 in
+              (LetExpr (x, params, ty, ex, body), rest)
+        | tok :: _ -> raise (ParseError ("Expected `in`, got " ^ tok_to_str tok))
+        | [] -> raise (ParseError ("Expected `in`, got end of input"))
+      )
+    | Let :: Rec :: Id x :: r -> let (params, ty, ex, r2) = parse_let_binding_common r in
+      (match r2 with
+        | In :: r3 ->
+            let (body, rest) = parse_expr_toplevel r3 in
+              (LetRecExpr (x, params, ty, ex, body), rest)
+        | tok :: _ -> raise (ParseError ("Expected `in`, got " ^ tok_to_str tok))
+        | [] -> raise (ParseError ("Expected `in`, got end of input"))
+      )
     | LParen :: RParen :: rest -> (UnitExpr, rest)
     | LParen :: r -> let (e, r2) = parse_expr_toplevel r in
       (match r2 with
@@ -244,7 +260,7 @@ and parse_expr (lst: token list): expr * token list =
     | x :: _ -> raise (ParseError ("Expected `,` or `)`, got " ^ tok_to_str x))
     | [] -> raise (ParseError ("Expected `,` or `)`, got end of input"))
   in
-  parse_expr_toplevel lst
+    parse_expr_toplevel lst
 (* match lst with *)
 (*   | Let :: _ -> failwith "stub" *)
 (*   | If :: r -> let (c, r2) = parse_expr r in *)
