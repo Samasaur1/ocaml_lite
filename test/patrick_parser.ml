@@ -275,9 +275,8 @@ let test_let_in_ty_params _ =
         ( "a",
           [],
           None,
-          LetIn
-            ( false,
-              "b",
+          LetExpr
+            ( "b",
               [ TypedParam ("c", IntType); ("d", Some (FunctionType (StringType, BoolType))) ],
               None,
               UnitExpr,
@@ -291,9 +290,8 @@ let test_let_in_ty_params _ =
         ( "a",
           [],
           None,
-          LetIn
-            ( true,
-              "b",
+          LetRecExpr
+            ( "b",
               [ TypedParam ("c", IntType); ("d", Some (FunctionType (StringType, BoolType))) ],
               None,
               UnitExpr,
@@ -309,9 +307,8 @@ let test_let_in_complex_params _ =
         ( "a",
           [],
           None,
-          LetIn
-            ( false,
-              "b",
+          LetExpr
+            ( "b",
               [
                 TypedParam ("c", StringType);
                 UntypedParam "d";
@@ -331,9 +328,8 @@ let test_let_in_complex_params _ =
         ( "a",
           [],
           None,
-          LetIn
-            ( true,
-              "b",
+          LetRecExpr
+            ( "b",
               [
                 TypedParam ("c", StringType);
                 UntypedParam "d";
@@ -355,9 +351,8 @@ let test_let_in_complex _ =
         ( "a",
           [],
           None,
-          LetIn
-            ( false,
-              "b",
+          LetExpr
+            ( "b",
               [
                 ("c", Some (TupleType [ IntType; BoolType ]));
                 UntypedParam "d";
@@ -377,9 +372,8 @@ let test_let_in_complex _ =
         ( "a",
           [],
           None,
-          LetIn
-            ( true,
-              "b",
+          LetRecExpr
+            ( "b",
               [
                 ("c", Some (TupleType [ IntType; BoolType ]));
                 UntypedParam "d";
@@ -399,9 +393,8 @@ let test_nested_let_in_param _ =
         ( "a",
           [],
           None,
-          LetIn
-            ( false,
-              "b",
+          LetExpr
+            ( "b",
               [],
               None,
               LetRecExpr ("c", [], None, UnitExpr, VarExpr "d"),
@@ -416,9 +409,8 @@ let test_nested_let_in_value _ =
         ( "a",
           [],
           None,
-          LetIn
-            ( true,
-              "b",
+          LetRecExpr
+            ( "b",
               [],
               None,
               UnitExpr,
