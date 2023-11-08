@@ -1,5 +1,5 @@
 open OUnit2
-open Util
+(* open Util *)
 open Ocaml_lite.Ast
 open Ocaml_lite.Lexer
 open Ocaml_lite.Parser
@@ -73,10 +73,10 @@ let test_typed_let_val _ =
 let test_let_untyped_param _ =
   assert_equal
     (parse (tokenize "let a b = () ;;"))
-    [ NonRecursiveBinding ("a", [ ("b", None) ], None, UnitExpr) ];
+    [ NonRecursiveBinding ("a", [ UntypedParam "b" ], None, UnitExpr) ];
   assert_equal
     (parse (tokenize "let rec a b = () ;;"))
-    [ RecursiveBinding ("a", [ ("b", None) ], None, UnitExpr) ]
+    [ RecursiveBinding ("a", [ UntypedParam "b" ], None, UnitExpr) ]
 
 let test_let_typed_param _ =
   assert_equal
@@ -89,10 +89,10 @@ let test_let_typed_param _ =
 let test_let_unty_params _ =
   assert_equal
     (parse (tokenize "let a b c = () ;;"))
-    [ NonRecursiveBinding ("a", [ ("b", None); ("c", None) ], None, UnitExpr) ];
+    [ NonRecursiveBinding ("a", [ UntypedParam "b"; UntypedParam "c" ], None, UnitExpr) ];
   assert_equal
     (parse (tokenize "let rec a b c = () ;;"))
-    [ RecursiveBinding ("a", [ ("b", None); ("c", None) ], None, UnitExpr) ]
+    [ RecursiveBinding ("a", [ UntypedParam "b"; UntypedParam "c" ], None, UnitExpr) ]
 
 let test_let_ty_params _ =
   assert_equal
@@ -122,8 +122,8 @@ let test_let_complex_params _ =
         ( "a",
           [
             ("b", Some (TupleType [ IntType; StringType ]));
-            ("c", None);
-            ("d", None);
+            UntypedParam "c";
+            UntypedParam "d";
             ("e", Some BoolType);
           ],
           None,
@@ -136,8 +136,8 @@ let test_let_complex_params _ =
         ( "a",
           [
             ("b", Some (TupleType [ IntType; StringType ]));
-            ("c", None);
-            ("d", None);
+            UntypedParam "c";
+            UntypedParam "d";
             ("e", Some BoolType);
           ],
           None,
@@ -153,9 +153,9 @@ let test_let_complex _ =
       NonRecursiveBinding
         ( "a",
           [
-            ("b", None);
+            UntypedParam "b";
             ("c", Some (FunctionType (TupleType [ IntType; StringType ], UnitType)));
-            ("d", None);
+            UntypedParam "d";
             ("e", Some UnitType);
           ],
           Some (FunctionType (IntType, StringType)),
@@ -169,9 +169,9 @@ let test_let_complex _ =
       RecursiveBinding
         ( "a",
           [
-            ("b", None);
+            UntypedParam "b";
             ("c", Some (FunctionType (TupleType [ IntType; StringType ], UnitType)));
-            ("d", None);
+            UntypedParam "d";
             ("e", Some UnitType);
           ],
           Some (FunctionType (IntType, StringType)),
@@ -212,7 +212,7 @@ let test_let_in_untyped_param _ =
         ( "a",
           [],
           None,
-          LetIn (false, "b", [ ("c", None) ], None, UnitExpr, VarExpr "d") );
+          LetIn (false, "b", [ UntypedParam "c" ], None, UnitExpr, VarExpr "d") );
     ];
   assert_equal
     (parse (tokenize "let a = let rec b c = () in d ;;"))
@@ -221,7 +221,7 @@ let test_let_in_untyped_param _ =
         ( "a",
           [],
           None,
-          LetIn (true, "b", [ ("c", None) ], None, UnitExpr, VarExpr "d") );
+          LetIn (true, "b", [ UntypedParam "c" ], None, UnitExpr, VarExpr "d") );
     ]
 
 let test_let_in_typed_param _ =
@@ -252,7 +252,7 @@ let test_let_in_unty_params _ =
         ( "a",
           [],
           None,
-          LetIn (false, "b", [ ("c", None); ("d", None) ], None, UnitExpr, VarExpr "e")
+          LetIn (false, "b", [ UntypedParam "c"; UntypedParam "d" ], None, UnitExpr, VarExpr "e")
         );
     ];
   assert_equal
@@ -262,7 +262,7 @@ let test_let_in_unty_params _ =
         ( "a",
           [],
           None,
-          LetIn (true, "b", [ ("c", None); ("d", None) ], None, UnitExpr, VarExpr "e")
+          LetIn (true, "b", [ UntypedParam "c"; UntypedParam "d" ], None, UnitExpr, VarExpr "e")
         );
     ]
 
@@ -314,8 +314,8 @@ let test_let_in_complex_params _ =
               "b",
               [
                 ("c", Some StringType);
-                ("d", None);
-                ("e", None);
+                UntypedParam "d";
+                UntypedParam "e";
                 ("f", Some (TupleType [ UnitType; BoolType ]));
               ],
               None,
@@ -336,8 +336,8 @@ let test_let_in_complex_params _ =
               "b",
               [
                 ("c", Some StringType);
-                ("d", None);
-                ("e", None);
+                UntypedParam "d";
+                UntypedParam "e";
                 ("f", Some (TupleType [ UnitType; BoolType ]));
               ],
               None,
@@ -360,9 +360,9 @@ let test_let_in_complex _ =
               "b",
               [
                 ("c", Some (TupleType [ IntType; BoolType ]));
-                ("d", None);
+                UntypedParam "d";
                 ("e", Some (FunctionType (UnitType, UnitType)));
-                ("f", None);
+                UntypedParam "f";
               ],
               Some StringType,
               UnitExpr,
@@ -382,9 +382,9 @@ let test_let_in_complex _ =
               "b",
               [
                 ("c", Some (TupleType [ IntType; BoolType ]));
-                ("d", None);
+                UntypedParam "d";
                 ("e", Some (FunctionType (UnitType, UnitType)));
-                ("f", None);
+                UntypedParam "f";
               ],
               Some StringType,
               UnitExpr,
@@ -487,12 +487,12 @@ let test_nullary_lambda _ =
 let test_simple_lambda _ =
   assert_equal
     (parse (tokenize "let a = fun x => () ;;"))
-    [ NonRecursiveBinding ("a", [], None, FunDefExpr ([ ("x", None) ], None, UnitExpr)) ]
+    [ NonRecursiveBinding ("a", [], None, FunDefExpr ([ UntypedParam "x" ], None, UnitExpr)) ]
 
 let test_typed_lambda _ =
   assert_equal
     (parse (tokenize "let a = fun x : unit => () ;;"))
-    [ NonRecursiveBinding ("a", [], None, FunDefExpr ([ ("x", None) ], Some UnitType, UnitExpr)) ]
+    [ NonRecursiveBinding ("a", [], None, FunDefExpr ([ UntypedParam "x" ], Some UnitType, UnitExpr)) ]
 
 let test_lambda_typed_param _ =
   assert_equal
@@ -507,7 +507,7 @@ let test_lambda_unty_params _ =
         ( "a",
           [],
           None,
-          FunDefExpr ([ ("x", None); ("y", None); ("z", None) ], None, UnitExpr) );
+          FunDefExpr ([ UntypedParam "x"; UntypedParam "y"; UntypedParam "z" ], None, UnitExpr) );
     ]
 
 let test_lambda_ty_params _ =
@@ -535,9 +535,9 @@ let test_lambda_complex_params _ =
           Lambda
             ( [
                 ("w", Some IntType);
-                ("x", None);
+                UntypedParam "x";
                 ("y", Some (TupleType [ BoolType; UnitType ]));
-                ("z", None);
+                UntypedParam "z";
               ],
               None,
               UnitExpr ) );
@@ -555,8 +555,8 @@ let test_lambda_complex _ =
           None,
           Lambda
             ( [
-                ("w", None);
-                ("x", None);
+                UntypedParam "w";
+                UntypedParam "x";
                 ("y", Some (TupleType [ UnitType; UnitType ]));
                 ("z", Some (FunctionType (IntType, StringType)));
               ],
@@ -572,7 +572,7 @@ let test_lambda_nested _ =
         ( "a",
           [],
           None,
-          FunDefExpr ([ ("x", None) ], None, FunDefExpr ([ ("y", None) ], None, UnitExpr))
+          FunDefExpr ([ UntypedParam "x" ], None, FunDefExpr ([ UntypedParam "y" ], None, UnitExpr))
         );
     ]
 
@@ -613,7 +613,7 @@ let test_funcall_fun _ =
         ( "a",
           [],
           None,
-          FunAppExpr(FunDefExpr ([ ("x", None) ], None, UnitExpr), VarExpr "y") );
+          FunAppExpr(FunDefExpr ([ UntypedParam "x" ], None, UnitExpr), VarExpr "y") );
     ]
 
 let test_simple_tuple _ =
@@ -680,8 +680,8 @@ let test_lambda_tuple _ =
           None,
           Tuple
             [
-              FunDefExpr ([ ("x", None) ], None, UnitExpr);
-              FunDefExpr ([ ("y", None) ], None, VarExpr "y");
+              FunDefExpr ([ UntypedParam "x" ], None, UnitExpr);
+              FunDefExpr ([ UntypedParam "y" ], None, VarExpr "y");
             ] );
     ]
 
@@ -1148,7 +1148,7 @@ let test_factorial _ =
     [
       RecursiveBinding
         ( "fact",
-          [ ("n", None) ],
+          [ UntypedParam "n" ],
           None,
           IfExpr
             ( BinopExpr
@@ -1176,7 +1176,7 @@ let test_list_len _ =
         );
       RecursiveBinding
         ( "len",
-          [ ("l", None) ],
+          [ UntypedParam "l" ],
           None,
           EMatch
             ( VarExpr "l",
