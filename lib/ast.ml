@@ -54,6 +54,7 @@ and typ =
   | StringType
   | UnitType
   | UserDeclaredType of string
+  | TypeVariable of int
 
 and match_branch =
   | MatchBranch of string * pattern_vars option * expr
@@ -77,6 +78,7 @@ let rec string_of_typ (t: typ): string =
   | StringType -> "string"
   | UnitType -> "unit"
   | UserDeclaredType x -> x
+  | TypeVariable i -> "t" ^ string_of_int i
 
 let rec string_of_program (indent: int) (p: program): string =
   match p with
