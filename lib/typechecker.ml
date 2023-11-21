@@ -5,6 +5,10 @@ let next_type_var (_: unit): typ =
     let () = next_var := !next_var + 1 in
     TypeVariable !next_var
 
+type tyty =
+  | Monotype of typ
+  | Polytype of int * tyty
+
 exception TypecheckError of string
 
 let rec typecheck (p: program): (string * typ) list =
@@ -78,64 +82,11 @@ and typecheck_expr (ctx: (string * typ) list) (constraints: (typ * typ) list) (e
   | UnitExpr -> (UnitType, constraints)
   | MatchExpr (matchval, branches) -> failwith "stub"
 
-(* let rec unify_constraints (constraints: (typ * typ) list): (int * typ) list = *)
-(*   let rec recursive_expand (cs: (typ * typ) list): (typ * typ) list = *)
-(*     List.concat_map *)
-(*       (fun c -> *)
-(*         let (l, r) = c in *)
-(*         match (l, r) with *)
-(*         | (IntType, IntType) -> [] *)
-(*         | (BoolType, BoolType) -> [] *)
-(*         | (StringType, StringType) -> [] *)
-(*         | (UnitType, UnitType) -> [] *)
-(*         | (FunctionType (a, b), FunctionType (c, d)) -> recursive_expand [(a, c); (b, d)] *)
-(*         | (TupleType l1, TupleType l2) -> *)
-(*           let subconstraints = (try *)
-(*             List.map2 *)
-(*               (fun a b -> *)
-(*                 (a, b) *)
-(*               ) *)
-(*               l1 *)
-(*               l2 *)
-(*           with *)
-(*             | Invalid_argument _ -> raise (TypecheckError "Got two TupleTypes with different lengths") *)
-(*           ) *)
-(*           in *)
-(*           recursive_expand subconstraints *)
-(*         | (UserDeclaredType s, UserDeclaredType r) -> if s = r then [] else raise (TypecheckError ("Type " ^ s ^ " cannot be the same as type " ^ r)) *)
-(*         | (TypeVariable i, TypeVariable j) when i = j -> [] *)
-(*         | (TypeVariable _, _) -> [c] *)
-(*         | (_, TypeVariable _) -> [(r, l)] (* NOTE: this allows us to know that the only types of constraints making it out of this function are (type var, type) *) *)
-(*         | (a, b) -> raise (TypecheckError ("Type " ^ string_of_typ a ^ " cannot be the same as type " ^ string_of_typ b)) *)
-(*       ) *)
-(*       cs *)
-(*   in *)
-(*   (* let _ = print_endline (List.map (fun x -> let (a, b) = x in string_of_typ a ^ " = " ^ string_of_typ b) (recursive_expand constraints) |> String.concat "\n") in *) *)
-(*   let cs = recursive_expand constraints in *)
-(*   let equalities = List.filter_map (fun x -> match x with (TypeVariable i, TypeVariable j) when i = j -> Some ((i,j)) | _ -> None) cs in *)
-(*     List.map (fun x ->  *)
-(*   (* List.filter (fun x -> match x with (TypeVariable i, TypeVariable j) when i = j -> true | _ -> false) cs *) *)
-(*   let partial_result =  *)
-(*   match cs with *)
-(*   | [] -> [] *)
-(*   (* | (TypeVariable i, TypeVariable j) :: tail -> *) *)
-(*   (*     let replaced = List.map *) *)
-(*   (*       (fun x -> match x with *) *)
-(*   (*         | (TypeVariable c, TypeVariable d) when i = c && j = d -> (UnitType, UnitType) *) *)
-(*   (*       ) *) *)
-(*   (*       tail *) *)
-(*   (*     in *) *)
-(*          *)
-(*   | (TypeVariable i, t) :: tail -> *)
-(*       let replaced = List.map (fun x -> let (TypeVariable j, t2) = x in if i = j then (t, t2) else x) tail in *)
-(*       unify_constraints replaced @ [(i, t)] *)
-(*   in *)
-(*     List.map (fun x -> let (i, t) = x in  *)
 type solved_constraint =
   | Identity
-  | NewConstraints of (typ * typ) list
+  | NewConstraints of (tyty * tyty) list
   | Mapping of int * typ
-let rec unify_constraints (constraints: (typ * typ) list): (int * typ) list =
+let rec unify_constraints (constraints: (tyty * tyty) list): (int * typ) list =
   let rec recursive_replace (i: int) (t: typ) (target: typ): typ =
     match target with
     | FunctionType (l, r) -> FunctionType (recursive_replace i t l, recursive_replace i t r)
@@ -146,6 +97,10 @@ let rec unify_constraints (constraints: (typ * typ) list): (int * typ) list =
     | UnitType -> UnitType
     | UserDeclaredType _ -> target
     | TypeVariable j -> if i = j then t else target
+  in let rec recursive_replace_poly (i: int) (t: typ) (target: tyty): tyty =
+    match target with
+    | Monotype m -> Monotype (recursive_replace i t m)
+    | Polytype (j, p) -> if i = j then failwith "Illegal" else Polytype (j, recursive_replace_poly i t p)
   in let rec occurs (i: int) (target: typ): bool =
     match target with
     | FunctionType (l, r) -> occurs i l || occurs i r
@@ -156,39 +111,45 @@ let rec unify_constraints (constraints: (typ * typ) list): (int * typ) list =
     | UnitType -> false
     | UserDeclaredType _ -> false
     | TypeVariable j -> if i = j then true else false
-  in let rec solve_constraint (c: typ * typ): solved_constraint =
+  in let rec solve_constraint (c: tyty * tyty): solved_constraint =
     match c with
-    | (TypeVariable i, TypeVariable j) when i = j -> Identity
-    | (TypeVariable i, TypeVariable j) when i <> j -> Mapping (i, TypeVariable j)
-    | (TypeVariable i, t) | (t, TypeVariable i) -> if occurs i t then raise (TypecheckError "Infinite type") else Mapping (i, t)
-    | (FunctionType (l, r), FunctionType (l', r')) -> NewConstraints [(l, l'); (r, r')]
-    | (TupleType l1, TupleType l2) ->
-      let subconstraints = (try
-        List.map2
-          (fun a b ->
-            (a, b)
+    | (Monotype l, Monotype r) -> 
+      (match (l, r) with
+        | (TypeVariable i, TypeVariable j) when i = j -> Identity
+        | (TypeVariable i, TypeVariable j) when i <> j -> Mapping (i, TypeVariable j)
+        | (TypeVariable i, t) | (t, TypeVariable i) -> if occurs i t then raise (TypecheckError "Infinite type") else Mapping (i, t)
+        | (FunctionType (l, r), FunctionType (l', r')) -> NewConstraints [(Monotype l, Monotype l'); (Monotype r, Monotype r')]
+        | (TupleType l1, TupleType l2) ->
+          let subconstraints = (try
+            List.map2
+              (fun a b ->
+                (Monotype a, Monotype b)
+              )
+              l1
+              l2
+          with
+            | Invalid_argument _ -> raise (TypecheckError "Got two TupleTypes with different lengths")
           )
-          l1
-          l2
-      with
-        | Invalid_argument _ -> raise (TypecheckError "Got two TupleTypes with different lengths")
+          in
+          NewConstraints subconstraints
+        | (IntType, IntType) -> Identity
+        | (BoolType, BoolType) -> Identity
+        | (StringType, StringType) -> Identity
+        | (UnitType, UnitType) -> Identity
+        | (UserDeclaredType s, UserDeclaredType r) -> if s = r then Identity else raise (TypecheckError ("Type " ^ s ^ " cannot be the same as type " ^ r))
+        | (a, b) -> raise (TypecheckError ("Type " ^ string_of_typ a ^ " cannot be the same as type " ^ string_of_typ b))
       )
-      in
-      NewConstraints subconstraints
-    | (IntType, IntType) -> Identity
-    | (BoolType, BoolType) -> Identity
-    | (StringType, StringType) -> Identity
-    | (UnitType, UnitType) -> Identity
-    | (UserDeclaredType s, UserDeclaredType r) -> if s = r then Identity else raise (TypecheckError ("Type " ^ s ^ " cannot be the same as type " ^ r))
-    | (a, b) -> raise (TypecheckError ("Type " ^ string_of_typ a ^ " cannot be the same as type " ^ string_of_typ b))
-  in let rec unify (substitutions: (int * typ) list) (cs: (typ * typ) list): (int * typ) list =
+    | (Polytype (i, t), Monotype r) -> let v = next_type_var () in NewConstraints [(recursive_replace_poly i v t, Monotype r)]
+    | (Monotype l, Polytype (i, t)) -> let v = next_type_var () in NewConstraints [(Monotype l, recursive_replace_poly i v t)]
+    | (Polytype (il, tl), Polytype (ir, tr)) -> let vl = next_type_var () in let vr = next_type_var () in NewConstraints [(recursive_replace_poly il vl tl, recursive_replace_poly ir vr tr)]
+  in let rec unify (substitutions: (int * typ) list) (cs: (tyty * tyty) list): (int * typ) list =
     match cs with
     | [] -> substitutions
     | c :: tail ->
       (match solve_constraint c with
         | Identity -> unify substitutions tail
         | NewConstraints cs' -> unify substitutions (cs' @ tail)
-        | Mapping (i, t) -> unify ((i, t) :: substitutions) (List.map (fun x -> let (l, r) = x in (recursive_replace i t l, recursive_replace i t r)) tail)
+        | Mapping (i, t) -> unify ((i, t) :: substitutions) (List.map (fun x -> let (l, r) = x in (recursive_replace_poly i t l, recursive_replace_poly i t r)) tail)
       )
   in
   unify [] constraints
