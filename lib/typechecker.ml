@@ -41,7 +41,7 @@ let rec typecheck (p: program): context =
       ([("string_of_int", FunctionType (IntType, StringType)); ("int_of_string", FunctionType (StringType, IntType)); ("print_string", FunctionType (StringType, UnitType))] |> List.map (fun x -> let (s, t) = x in (s, Monotype t)))
       bds
   in
-  (* let _ = print_string (List.map (fun mapping -> let (name, Monotype ty) = mapping in name ^ ": " ^ string_of_typ ty) ctx |> String.concat "\n") in *)
+  (* let _ = print_string (List.map (fun mapping -> let (name, ty) = mapping in name ^ ": " ^ string_of_tyty ty) ctx |> String.concat "\n") in *)
   ctx
 and typecheck_binding (ctx: context) (b: binding): context =
   match b with
@@ -136,21 +136,36 @@ and typecheck_expr (ctx: context) (e: expr): (typ * (tyty * tyty) list) =
       | Some (Polytype (i, t)) -> let n = next_type_var () in (n, [Monotype n, Polytype (i, t)])
     )
   | UnitExpr -> (UnitType, [])
-  | MatchExpr (matchval, branches) -> failwith "stub" (* TODO: auto-generated method stub *)
-  (* | MatchExpr (matchval, branches) -> *)
-  (*     let (matchty, constraints) = typecheck_expr ctx matchval in *)
-  (*       let checked_branches = List.map *)
-  (*         (fun branch -> *)
-  (*           let MatchBranch (ctor, pvs, e) = branch in *)
-  (*           match List.assoc_opt ctor ctx with *)
-  (*             | None -> raise (TypecheckError ("Constructor '" ^ ctor ^ "' does not exist and thus cannot be used in match branch")) *)
-  (*             | Some (t) ->  *)
-  (*           (* let (ctor_ty, c1) = typecheck_expr ctx ctor in *) *)
-  (*           0 *)
-  (*         ) *)
-  (*         branches *)
-  (*       in *)
-  (*     (UnitType, []) *)
+  (* | MatchExpr (matchval, branches) -> failwith "stub" (* TODO: auto-generated method stub *) *)
+  | MatchExpr (matchval, branches) ->
+    let (matchty, constraints) = typecheck_expr ctx matchval in
+    let output_ty = next_type_var () in
+    let checked_branches = List.concat_map
+      (fun branch ->
+        let MatchBranch (ctor, pvs, e) = branch in
+        match List.assoc_opt ctor ctx with
+        | None -> raise (TypecheckError ("Constructor '" ^ ctor ^ "' does not exist and thus cannot be used in match branch"))
+        | Some (t) ->
+          let (the_ty, (this_output_ty, new_constraints)) = match (t, pvs) with
+            | (Monotype (UserDeclaredType u), None) -> (UserDeclaredType u, typecheck_expr ctx e)
+            | (Monotype (UserDeclaredType _), Some _) -> raise (TypecheckError ("Constructor '" ^ ctor ^ "' does not take parameters"))
+            | (Monotype (FunctionType (TupleType lst, r)), Some (MultiplePatternVars lst2)) ->
+              let new_ctx = List.map2 (fun ty name -> (name, Monotype ty)) lst lst2 in
+                (r, typecheck_expr (new_ctx @ ctx) e)
+            | (Monotype (FunctionType (TupleType _, _)), Some (SinglePatternVar _)) -> raise (TypecheckError ("Constructor '" ^ ctor ^ "' takes multiple parameters"))
+            | (Monotype (FunctionType (l, r)), Some (SinglePatternVar v)) ->
+                (r, typecheck_expr ((v, Monotype l) :: ctx) e)
+            | (Monotype (FunctionType (_, _)), Some (MultiplePatternVars _)) -> raise (TypecheckError ("Constructor '" ^ ctor ^ "' only takes one parameter"))
+            | (Monotype (FunctionType (_, _)), None) -> raise (TypecheckError ("Constructor '" ^ ctor ^ "' must take parameters"))
+            | (Monotype _, _) -> raise (TypecheckError ("Cannot match on non-user-defined-type"))
+            | _ -> raise (TypecheckError ("Cannot match on polytypes"))
+          in
+
+          [(Monotype matchty, Monotype the_ty); (Monotype output_ty, Monotype this_output_ty)] @ new_constraints
+      )
+      branches
+    in
+      (output_ty, checked_branches @ constraints)
 and unify_constraints (constraints: (tyty * tyty) list): (int * typ) list =
   let rec recursive_replace (i: int) (t: typ) (target: typ): typ =
     match target with
