@@ -26,6 +26,11 @@ let monotonize (l: (typ * typ) list): (tyty * tyty) list =
 
 type context = (string * tyty) list
 
+let rec string_of_tyty (t: tyty): string =
+  match t with
+  | Monotype m -> string_of_typ m
+  | Polytype (i, p) -> "forall t" ^ string_of_int i ^ ". " ^ string_of_tyty p
+
 let rec typecheck (p: program): context =
   let Program (bds) = p in
   (* let (ctx, constraints) = List.fold_left (fun ((ctx, constraints), acc) -> acc) ([], []) bds in *)
@@ -44,8 +49,11 @@ and typecheck_binding (ctx: context) (b: binding): context =
       let param_ctx = List.map (fun p -> match p with | UntypedParam x -> (x, Monotype (next_type_var ())) | TypedParam (x, t) -> (x, Monotype t)) params in
         let (value_ty, constraints') = typecheck_expr (param_ctx @ ctx) value in
           let value_type = List.fold_right (fun a acc -> FunctionType (a, acc)) (List.map (fun x -> let (_, Monotype t) = x in t) param_ctx) value_ty in
+    (* let _ = print_endline (List.map (fun x -> let (l, r) = x in string_of_tyty l ^ " ~ " ^ string_of_tyty r) constraints' |> String.concat "\n") in *)
             let substitutions = unify_constraints ((match ty with | None -> [] | Some t -> [(Monotype t, Monotype value_ty)]) @ constraints') in
+    (* let _ = print_endline (List.map (fun x -> let (i, t) = x in string_of_int i ^ " > " ^ string_of_typ t) substitutions |> String.concat "\n") in *)
               let substituted = apply_substitutions substitutions value_type in
+    (* let _ = print_endline (string_of_typ substituted) in *)
                 let generalized = generalize ctx substituted in
                   (name, generalized) :: ctx
   | RecursiveBinding (name, params, ty, value) ->
@@ -129,6 +137,20 @@ and typecheck_expr (ctx: context) (e: expr): (typ * (tyty * tyty) list) =
     )
   | UnitExpr -> (UnitType, [])
   | MatchExpr (matchval, branches) -> failwith "stub" (* TODO: auto-generated method stub *)
+  (* | MatchExpr (matchval, branches) -> *)
+  (*     let (matchty, constraints) = typecheck_expr ctx matchval in *)
+  (*       let checked_branches = List.map *)
+  (*         (fun branch -> *)
+  (*           let MatchBranch (ctor, pvs, e) = branch in *)
+  (*           match List.assoc_opt ctor ctx with *)
+  (*             | None -> raise (TypecheckError ("Constructor '" ^ ctor ^ "' does not exist and thus cannot be used in match branch")) *)
+  (*             | Some (t) ->  *)
+  (*           (* let (ctor_ty, c1) = typecheck_expr ctx ctor in *) *)
+  (*           0 *)
+  (*         ) *)
+  (*         branches *)
+  (*       in *)
+  (*     (UnitType, []) *)
 and unify_constraints (constraints: (tyty * tyty) list): (int * typ) list =
   let rec recursive_replace (i: int) (t: typ) (target: typ): typ =
     match target with
@@ -197,6 +219,7 @@ and unify_constraints (constraints: (tyty * tyty) list): (int * typ) list =
   in
   unify [] constraints
 and apply_substitutions (substitutions: (int * typ) list) (target: typ): typ =
+  (* let _ = print_endline ("  " ^ string_of_typ target) in *)
   match target with
     | FunctionType (l, r) -> FunctionType (apply_substitutions substitutions l, apply_substitutions substitutions r)
     | TupleType lst -> TupleType (List.map (apply_substitutions substitutions) lst)
@@ -205,7 +228,7 @@ and apply_substitutions (substitutions: (int * typ) list) (target: typ): typ =
     | StringType -> target
     | UnitType -> target
     | UserDeclaredType _ -> target
-    | TypeVariable j -> (match List.assoc_opt j substitutions with | None -> target | Some t -> t)
+    | TypeVariable j -> (match List.assoc_opt j substitutions with | None -> target | Some t -> apply_substitutions substitutions t)
 and generalize (ctx: context) (target: typ): tyty =
   let rec extract_type_vars (t: typ): int list =
     match t with
@@ -224,13 +247,13 @@ and generalize (ctx: context) (target: typ): tyty =
     | Polytype (i, p) -> extract_type_vars_poly p
   in
     let tvs = extract_type_vars target in
-    let _ = print_endline (List.map string_of_int tvs |> String.concat " ") in
-    let preexisting_tvs = List.concat_map (fun x -> let (name, type') = x in extract_type_vars_poly type') ctx in
-    let _ = print_endline (List.map string_of_int preexisting_tvs |> String.concat " ") in
-    let final_tvs = List.fold_left (fun acc a -> List.filter (fun x -> x <> a) acc) tvs preexisting_tvs in
-    let _ = print_endline (List.map string_of_int final_tvs |> String.concat " ") in
-    let ftvs = List.sort_uniq compare final_tvs in
-    List.fold_left (fun acc a -> Polytype (a, acc)) (Monotype target) ftvs
+    (* let _ = print_endline (List.map string_of_int tvs |> String.concat " ") in *)
+      let preexisting_tvs = List.concat_map (fun x -> let (name, type') = x in extract_type_vars_poly type') ctx in
+    (* let _ = print_endline (List.map string_of_int preexisting_tvs |> String.concat " ") in *)
+        let final_tvs = List.fold_left (fun acc a -> List.filter (fun x -> x <> a) acc) tvs preexisting_tvs in
+    (* let _ = print_endline (List.map string_of_int final_tvs |> String.concat " ") in *)
+          let ftvs = List.sort_uniq compare final_tvs in
+            List.fold_left (fun acc a -> Polytype (a, acc)) (Monotype target) ftvs
 (* and generalize (type_vars: int list) (target: typ): tyty = *)
 (*   match type_vars with *)
 (*   | [] -> Monotype target *)
