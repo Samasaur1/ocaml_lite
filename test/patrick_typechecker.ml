@@ -3,33 +3,70 @@ open Util
 open Ocaml_lite.Ast
 open Ocaml_lite.Lexer
 open Ocaml_lite.Parser
-open Ocaml_lite.Typecheck
+open Ocaml_lite.Typechecker
 
-let typecheck_code (s : string) : env = typecheck (parse (tokenize s))
+let typecheck_code (s : string) : context = typecheck (parse (tokenize s))
 
-let rec reorder_polytypes (t : typ) (pol : int list) : typ =
+(* compat shims *)
+let get_type = List.assoc
+let gen_tidx () =
+  let TypeVariable i = next_type_var () in
+  i
+let negate_bifunc (f: 'a -> 'b -> bool) =
+  let g (a: 'a) (b: 'b): bool =
+    let orig = f a b in
+    not orig
+  in
+  g
+let rec subst_tval (i: int) (j: int) (target': tyty): tyty =
+  let rec recursive_replace (i: int) (t: typ) (target: typ): typ =
+    match target with
+    | FunctionType (l, r) -> FunctionType (recursive_replace i t l, recursive_replace i t r)
+    | TupleType lst -> TupleType (List.map (recursive_replace i t) lst)
+    | IntType -> IntType
+    | BoolType -> BoolType
+    | StringType -> StringType
+    | UnitType -> UnitType
+    | UserDeclaredType _ -> target
+    | TypeVariable j -> if i = j then t else target
+  in let rec recursive_replace_poly (i: int) (t: typ) (target: tyty): tyty =
+    match target with
+    | Monotype m -> Monotype (recursive_replace i t m)
+    | Polytype (j, p) -> if i = j then failwith "Illegal" else Polytype (j, recursive_replace_poly i t p)
+  in
+    recursive_replace_poly i (TypeVariable j) target'
+let map_concat_uniq (f: 'a -> 'b list) (lst: 'a list): 'b list =
+  let partial = List.concat_map f lst in
+  List.sort_uniq compare partial
+let merge_uniq (l: 'a list) (r: 'a list): 'a list =
+  List.sort_uniq compare (l @ r)
+let add_foralls (t: typ) (lst: int list): tyty =
+  List.fold_right (fun a acc -> Polytype(a, acc)) lst (Monotype t)
+(* compat shims *)
+
+let rec reorder_polytypes (t : tyty) (pol : int list) : tyty =
   let rec help = function
-    | TVar v when List.memq v pol -> [ v ]
-    | TVar _ | TInt | TBool | TString | TUnit | TId _ -> []
-    | TProduct ts -> map_concat_uniq help ts
-    | TArrow (ta, tb) -> merge_uniq (help ta) (help tb)
+    | TypeVariable v when List.memq v pol -> [ v ]
+    | TypeVariable _ | IntType | BoolType | StringType | UnitType | UserDeclaredType _ -> []
+    | TupleType ts -> map_concat_uniq help ts
+    | FunctionType (ta, tb) -> merge_uniq (help ta) (help tb)
   in
   match t with
-  | PolyType (v, t) ->
+  | Polytype (v, t) ->
       if List.memq v pol then
-        failwith ("Type " ^ ty_to_string (TVar v) ^ " appears twice in list")
+        failwith ("Type " ^ string_of_typ (TypeVariable v) ^ " appears twice in list")
       else reorder_polytypes t (v :: pol)
-  | MonoType t -> add_foralls t (help t)
+  | Monotype t -> add_foralls t (help t)
 
-let rec types_eq' (t1 : typ) (t2 : typ) : bool =
+let rec types_eq' (t1 : tyty) (t2 : tyty) : bool =
   match (t1, t2) with
-  | PolyType (v1, t1), PolyType (v2, t2) ->
+  | Polytype (v1, t1), Polytype (v2, t2) ->
       let vn = gen_tidx () in
       types_eq' (subst_tval v1 vn t1) (subst_tval v2 vn t2)
-  | MonoType t1, MonoType t2 -> t1 = t2
+  | Monotype t1, Monotype t2 -> t1 = t2
   | _ -> false
 
-let types_eq (t1 : typ) (t2 : typ) : bool =
+let types_eq (t1 : tyty) (t2 : tyty) : bool =
   types_eq' (reorder_polytypes t1 []) (reorder_polytypes t2 [])
 
 (* TODO: Test unequal types *)
@@ -37,139 +74,139 @@ let types_eq (t1 : typ) (t2 : typ) : bool =
 let test_type_cmp_simple _ =
   List.iter
     (fun x ->
-      assert_equal (MonoType x) (MonoType x) ~printer:typ_to_string
+      assert_equal (Monotype x) (Monotype x) ~printer:string_of_tyty
         ~cmp:types_eq)
-    [ TInt; TBool; TString; TUnit ]
+    [ IntType; BoolType; StringType; UnitType ]
 
 let test_type_ne_simple _ =
   List.iter
     (fun (x, y) ->
       if x <> y then
-        assert_equal (MonoType x) (MonoType y) ~printer:typ_to_string
+        assert_equal (Monotype x) (Monotype y) ~printer:string_of_tyty
           ~cmp:(negate_bifunc types_eq) ~msg:"Types were unexpectedly equal")
-    (cart_sq [ TInt; TBool; TString; TUnit ])
+    (cart_sq [ IntType; BoolType; StringType; UnitType ])
 
 let test_type_cmp_tid _ =
   List.iter
     (fun x ->
-      assert_equal (MonoType (TId x)) (MonoType (TId x)) ~printer:typ_to_string
+      assert_equal (Monotype (UserDeclaredType x)) (Monotype (UserDeclaredType x)) ~printer:string_of_tyty
         ~cmp:types_eq)
     [ "a"; "foo"; "test" ]
 
 let test_type_cmp_one_poly _ =
   let t1 = gen_tidx () in
   assert_equal
-    (PolyType (t1, MonoType (TVar t1)))
-    (PolyType (t1, MonoType (TVar t1)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Monotype (TypeVariable t1)))
+    (Polytype (t1, Monotype (TypeVariable t1)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_type_cmp_rename _ =
   let t1 = gen_tidx () in
   let t2 = gen_tidx () in
   assert_equal
-    (PolyType (t1, MonoType (TVar t1)))
-    (PolyType (t2, MonoType (TVar t2)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Monotype (TypeVariable t1)))
+    (Polytype (t2, Monotype (TypeVariable t2)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_type_cmp_swap _ =
   let t1 = gen_tidx () in
   let t2 = gen_tidx () in
   assert_equal
-    (PolyType (t1, PolyType (t2, MonoType (TArrow (TVar t1, TVar t2)))))
-    (PolyType (t2, PolyType (t1, MonoType (TArrow (TVar t1, TVar t2)))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Polytype (t2, Monotype (FunctionType (TypeVariable t1, TypeVariable t2)))))
+    (Polytype (t2, Polytype (t1, Monotype (FunctionType (TypeVariable t1, TypeVariable t2)))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_type_cmp_rename_shadow _ =
   let t1 = gen_tidx () in
   let t2 = gen_tidx () in
   assert_equal
-    (PolyType (t1, PolyType (t2, MonoType (TArrow (TVar t1, TVar t2)))))
-    (PolyType (t2, PolyType (t1, MonoType (TArrow (TVar t2, TVar t1)))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Polytype (t2, Monotype (FunctionType (TypeVariable t1, TypeVariable t2)))))
+    (Polytype (t2, Polytype (t1, Monotype (FunctionType (TypeVariable t2, TypeVariable t1)))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_type_cmp_rename_swap _ =
   let t1 = gen_tidx () in
   let t2 = gen_tidx () in
   let t3 = gen_tidx () in
   assert_equal
-    (PolyType
+    (Polytype
        ( t1,
-         PolyType
+         Polytype
            ( t2,
-             PolyType
-               (t3, MonoType (TArrow (TVar t1, TArrow (TVar t2, TVar t3)))) ) ))
-    (PolyType
+             Polytype
+               (t3, Monotype (FunctionType (TypeVariable t1, FunctionType (TypeVariable t2, TypeVariable t3)))) ) ))
+    (Polytype
        ( t2,
-         PolyType
+         Polytype
            ( t1,
-             PolyType
-               (t3, MonoType (TArrow (TVar t3, TArrow (TVar t1, TVar t2)))) ) ))
-    ~printer:typ_to_string ~cmp:types_eq
+             Polytype
+               (t3, Monotype (FunctionType (TypeVariable t3, FunctionType (TypeVariable t1, TypeVariable t2)))) ) ))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_typecheck_simple _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = () ;;"))
-    (MonoType TUnit) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype UnitType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_typecheck_number _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = 0 ;;"))
-    (MonoType TInt) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype IntType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_typecheck_bool _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = true ;;"))
-    (MonoType TBool) ~printer:typ_to_string ~cmp:types_eq;
+    (Monotype BoolType) ~printer:string_of_tyty ~cmp:types_eq;
   assert_equal
     (get_type "a" (typecheck_code "let a = false ;;"))
-    (MonoType TBool) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype BoolType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_typecheck_string _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = \"str\" ;;"))
-    (MonoType TString) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype StringType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_simple_infer _ =
   assert_equal
     (get_type "b" (typecheck_code "let a = 0 ;; let b = a ;;"))
-    (MonoType TInt) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype IntType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_simple_func _ =
   assert_equal
     (get_type "a" (typecheck_code "let a (b : int) = 0 ;;"))
-    (MonoType (TArrow (TInt, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_simple_lambda _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = fun (x : int) => 0 ;;"))
-    (MonoType (TArrow (TInt, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_arg_infer _ =
   assert_equal
     (get_type "a" (typecheck_code "let a (b : string) = b ;;"))
-    (MonoType (TArrow (TString, TString)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (StringType, StringType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_funcall _ =
   assert_equal
     (get_type "a"
        (typecheck_code "let f (x : int) : int = x ;; let a = f 1 ;;"))
-    (MonoType TInt) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype IntType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_multiarg_func _ =
   assert_equal
     (get_type "a" (typecheck_code "let a (b : int) (c : string) = b ;;"))
-    (MonoType (TArrow (TInt, TArrow (TString, TInt))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, FunctionType (StringType, IntType))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_int_binops _ =
   List.iter
     (fun x ->
       assert_equal
         (get_type "a" (typecheck_code ("let a = 1 " ^ x ^ " 1 ;;")))
-        (MonoType TInt) ~printer:typ_to_string ~cmp:types_eq)
+        (Monotype IntType) ~printer:string_of_tyty ~cmp:types_eq)
     [ "+"; "-"; "*"; "/"; "mod" ]
 
 let test_int_binop_fns _ =
@@ -177,8 +214,8 @@ let test_int_binop_fns _ =
     (fun x ->
       assert_equal
         (get_type "a" (typecheck_code ("let a x y = x " ^ x ^ " y ;;")))
-        (MonoType (TArrow (TInt, TArrow (TInt, TInt))))
-        ~printer:typ_to_string ~cmp:types_eq)
+        (Monotype (FunctionType (IntType, FunctionType (IntType, IntType))))
+        ~printer:string_of_tyty ~cmp:types_eq)
     [ "+"; "-"; "*"; "/"; "mod" ]
 
 let test_cmp_binops _ =
@@ -186,39 +223,39 @@ let test_cmp_binops _ =
     (fun x ->
       assert_equal
         (get_type "a" (typecheck_code ("let a = 1 " ^ x ^ " 1 ;;")))
-        (MonoType TBool) ~printer:typ_to_string ~cmp:types_eq)
+        (Monotype BoolType) ~printer:string_of_tyty ~cmp:types_eq)
     [ "<"; "=" ]
 
 let test_lt_fn _ =
   assert_equal
     (get_type "a" (typecheck_code "let a x y = x < y ;;"))
-    (MonoType (TArrow (TInt, TArrow (TInt, TBool))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, FunctionType (IntType, BoolType))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_eq_fn _ =
   let t1 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let a x y = x = y ;;"))
-    (PolyType (t1, MonoType (TArrow (TVar t1, TArrow (TVar t1, TBool)))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Monotype (FunctionType (TypeVariable t1, FunctionType (TypeVariable t1, BoolType)))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_str_concat _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = \"foo\" ^ \"bar\" ;;"))
-    (MonoType TString) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype StringType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_str_concat_fn _ =
   assert_equal
     (get_type "a" (typecheck_code "let a x y = x ^ y ;;"))
-    (MonoType (TArrow (TString, TArrow (TString, TString))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (StringType, FunctionType (StringType, StringType))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_logical_binops _ =
   List.iter
     (fun x ->
       assert_equal
         (get_type "a" (typecheck_code ("let a = true " ^ x ^ " false ;;")))
-        (MonoType TBool) ~printer:typ_to_string ~cmp:types_eq)
+        (Monotype BoolType) ~printer:string_of_tyty ~cmp:types_eq)
     [ "&&"; "||" ]
 
 let test_logical_binop_fns _ =
@@ -226,49 +263,49 @@ let test_logical_binop_fns _ =
     (fun x ->
       assert_equal
         (get_type "a" (typecheck_code ("let a x y = x " ^ x ^ " y ;;")))
-        (MonoType (TArrow (TBool, TArrow (TBool, TBool))))
-        ~printer:typ_to_string ~cmp:types_eq)
+        (Monotype (FunctionType (BoolType, FunctionType (BoolType, BoolType))))
+        ~printer:string_of_tyty ~cmp:types_eq)
     [ "&&"; "||" ]
 
 let test_lognot _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = not true ;;"))
-    (MonoType TBool) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype BoolType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_lognot_fn _ =
   assert_equal
     (get_type "a" (typecheck_code "let a x = not x ;;"))
-    (MonoType (TArrow (TBool, TBool)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (BoolType, BoolType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_bitnot _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = ~1 ;;"))
-    (MonoType TInt) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype IntType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_bitnot_fn _ =
   assert_equal
     (get_type "a" (typecheck_code "let a x = ~x ;;"))
-    (MonoType (TArrow (TInt, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_intstr _ =
   assert_equal
     (get_type "int_of_string" (typecheck_code ""))
-    (MonoType (TArrow (TString, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (StringType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_strint _ =
   assert_equal
     (get_type "string_of_int" (typecheck_code ""))
-    (MonoType (TArrow (TInt, TString)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, StringType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_print _ =
   assert_equal
     (get_type "print_string" (typecheck_code ""))
-    (MonoType (TArrow (TString, TUnit)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (StringType, UnitType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 (* TODO: Redefine builtin functions *)
 
@@ -276,47 +313,47 @@ let test_id_fn _ =
   let t1 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let a x = x ;;"))
-    (PolyType (t1, MonoType (TArrow (TVar t1, TVar t1))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Monotype (FunctionType (TypeVariable t1, TypeVariable t1))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_const_fn _ =
   let t1 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let a x = 0 ;;"))
-    (PolyType (t1, MonoType (TArrow (TVar t1, TInt))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Monotype (FunctionType (TypeVariable t1, IntType))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_multi_gens _ =
   let t1 = gen_tidx () in
   let t2 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let a x y = true ;;"))
-    (PolyType
-       (t1, PolyType (t2, MonoType (TArrow (TVar t1, TArrow (TVar t2, TBool))))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype
+       (t1, Polytype (t2, Monotype (FunctionType (TypeVariable t1, FunctionType (TypeVariable t2, BoolType))))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_mixed_generic _ =
   let t1 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let a x y = x + 1 ;;"))
-    (PolyType (t1, MonoType (TArrow (TInt, TArrow (TVar t1, TInt)))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Monotype (FunctionType (IntType, FunctionType (TypeVariable t1, IntType)))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_recursion _ =
   let t1 = gen_tidx () in
   let t2 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let rec a x = a x ;;"))
-    (PolyType (t1, PolyType (t2, MonoType (TArrow (TVar t1, TVar t2)))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Polytype (t2, Monotype (FunctionType (TypeVariable t1, TypeVariable t2)))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_recurse_fun _ =
   let t1 = gen_tidx () in
   let t2 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let rec a = fun x => a x ;;"))
-    (PolyType (t1, PolyType (t2, MonoType (TArrow (TVar t1, TVar t2)))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Polytype (t2, Monotype (FunctionType (TypeVariable t1, TypeVariable t2)))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_multiarg_rec _ =
   let t1 = gen_tidx () in
@@ -324,13 +361,13 @@ let test_multiarg_rec _ =
   let t3 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let rec a x y = a x y ;;"))
-    (PolyType
+    (Polytype
        ( t1,
-         PolyType
+         Polytype
            ( t2,
-             PolyType
-               (t3, MonoType (TArrow (TVar t1, TArrow (TVar t2, TVar t3)))) ) ))
-    ~printer:typ_to_string ~cmp:types_eq
+             Polytype
+               (t3, Monotype (FunctionType (TypeVariable t1, FunctionType (TypeVariable t2, TypeVariable t3)))) ) ))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_multiarg_rec_fun _ =
   let t1 = gen_tidx () in
@@ -338,79 +375,79 @@ let test_multiarg_rec_fun _ =
   let t3 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let rec a = fun x y => a x y ;;"))
-    (PolyType
+    (Polytype
        ( t1,
-         PolyType
+         Polytype
            ( t2,
-             PolyType
-               (t3, MonoType (TArrow (TVar t1, TArrow (TVar t2, TVar t3)))) ) ))
-    ~printer:typ_to_string ~cmp:types_eq
+             Polytype
+               (t3, Monotype (FunctionType (TypeVariable t1, FunctionType (TypeVariable t2, TypeVariable t3)))) ) ))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_flipped_rec _ =
   let t1 = gen_tidx () in
   let t2 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let rec a x y = a y x ;;"))
-    (PolyType
+    (Polytype
        ( t1,
-         PolyType (t2, MonoType (TArrow (TVar t1, TArrow (TVar t1, TVar t2))))
+         Polytype (t2, Monotype (FunctionType (TypeVariable t1, FunctionType (TypeVariable t1, TypeVariable t2))))
        ))
-    ~printer:typ_to_string ~cmp:types_eq
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_flipped_rec_fun _ =
   let t1 = gen_tidx () in
   let t2 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let rec a = fun x y => a y x ;;"))
-    (PolyType
+    (Polytype
        ( t1,
-         PolyType (t2, MonoType (TArrow (TVar t1, TArrow (TVar t1, TVar t2))))
+         Polytype (t2, Monotype (FunctionType (TypeVariable t1, FunctionType (TypeVariable t1, TypeVariable t2))))
        ))
-    ~printer:typ_to_string ~cmp:types_eq
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_shadow _ =
   assert_equal
     (get_type "a" (typecheck_code "let x = true ;; let a = let x = 1 in x ;;"))
-    (MonoType TInt) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype IntType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_shadow_param _ =
   assert_equal
     (get_type "a" (typecheck_code "let x = true ;; let a (x : int) = x ;;"))
-    (MonoType (TArrow (TInt, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_shadow_ty _ =
   assert_equal
     (get_type "a" (typecheck_code "type t = | T ;; let a = let t = 1 in t ;;"))
-    (MonoType TInt) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype IntType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_shadow_overwrite _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = true ;; let a = 0 ;;"))
-    (MonoType TInt) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype IntType) ~printer:string_of_tyty ~cmp:types_eq
 
 (* TODO: Better way to do this? *)
 let test_shadow_rec _ =
   assert_equal
     (get_type "a"
        (typecheck_code "let x = true ;; let rec a x = 1 + (a (x - 1)) ;;"))
-    (MonoType (TArrow (TInt, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_shadow_fun _ =
   assert_equal
     (get_type "a"
        (typecheck_code "let x = true ;; let a = fun (x : int) => x ;;"))
-    (MonoType (TArrow (TInt, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_shadow_match _ =
   assert_equal
     (get_type "a"
        (typecheck_code
           "let x = true ;; let a (y : int) = match y with | x => x ;;"))
-    (MonoType (TArrow (TInt, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 (* TODO: A few more shadowing checks (in match, recursive inner functions) *)
 
@@ -418,197 +455,197 @@ let test_scope_limit _ =
   assert_equal
     (get_type "a"
        (typecheck_code "let x = true ;; let f (x : int) = x ;; let a = x ;;"))
-    (MonoType TBool) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype BoolType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_scope_lim_inner _ =
   assert_equal
     (get_type "a"
        (typecheck_code "let x = true ;; let a = let f x = x in x ;;"))
-    (MonoType TBool) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype BoolType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_scope_lim_fun _ =
   assert_equal
     (get_type "a"
        (typecheck_code "let x = true ;; let f = fun x => x + 1 ;; let a = x ;;"))
-    (MonoType TBool) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype BoolType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_scope_lim_if _ =
   assert_equal
     (get_type "a"
        (typecheck_code
           "let x = true ;; let a b = if true then let x = 1 in b else x ;;"))
-    (MonoType (TArrow (TBool, TBool)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (BoolType, BoolType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_let_in _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = let x : int = 1 in x ;;"))
-    (MonoType TInt) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype IntType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_let_in_untyped _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = let x = 1 in x ;;"))
-    (MonoType TInt) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype IntType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_let_in_generic _ =
   let t1 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let a x = let y = x in y ;;"))
-    (PolyType (t1, MonoType (TArrow (TVar t1, TVar t1))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Monotype (FunctionType (TypeVariable t1, TypeVariable t1))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_let_in_fn _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = let f (x : int) = 1 in f ;;"))
-    (MonoType (TArrow (TInt, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_let_in_mixed _ =
   let t1 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let a x = let f y = x = y in f ;;"))
-    (PolyType (t1, MonoType (TArrow (TVar t1, TArrow (TVar t1, TBool)))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Monotype (FunctionType (TypeVariable t1, FunctionType (TypeVariable t1, BoolType)))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_simple_cond _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = if true then 1 else 2 ;;"))
-    (MonoType TInt) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype IntType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_infer_cond_bool _ =
   assert_equal
     (get_type "a" (typecheck_code "let a x = if x then 1 else 2 ;;"))
-    (MonoType (TArrow (TBool, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (BoolType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_nested_cond_bool _ =
   assert_equal
     (get_type "a"
        (typecheck_code "let a x = if if true then x else false then 1 else 2 ;;"))
-    (MonoType (TArrow (TBool, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (BoolType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_cond_infer_same _ =
   let t1 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let a x y = if true then x else y ;;"))
-    (PolyType (t1, MonoType (TArrow (TVar t1, TArrow (TVar t1, TVar t1)))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Monotype (FunctionType (TypeVariable t1, FunctionType (TypeVariable t1, TypeVariable t1)))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_cond_infer_val _ =
   assert_equal
     (get_type "a" (typecheck_code "let a x = if true then x else 1 ;;"))
-    (MonoType (TArrow (TInt, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_cond_infer_via_bool _ =
   assert_equal
     (get_type "a" (typecheck_code "let a x y = if x then x else y ;;"))
-    (MonoType (TArrow (TBool, TArrow (TBool, TBool))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (BoolType, FunctionType (BoolType, BoolType))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_simple_fun _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = fun x => x + 1 ;;"))
-    (MonoType (TArrow (TInt, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_lambda_id _ =
   let t1 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let a = fun x => x ;;"))
-    (PolyType (t1, MonoType (TArrow (TVar t1, TVar t1))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Monotype (FunctionType (TypeVariable t1, TypeVariable t1))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_explicit_fun _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = fun (x : int) : int => 0 ;;"))
-    (MonoType (TArrow (TInt, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_fun_infer_ret _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = fun (x : int) => x ;;"))
-    (MonoType (TArrow (TInt, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_fun_infer_arg _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = fun x : int => x ;;"))
-    (MonoType (TArrow (TInt, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_fun_two_arg _ =
   assert_equal
     (get_type "a"
        (typecheck_code "let a = fun (x : int) (y : int) : int => 0 ;;"))
-    (MonoType (TArrow (TInt, TArrow (TInt, TInt))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, FunctionType (IntType, IntType))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_simple_funcall _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = string_of_int 1 ;;"))
-    (MonoType TString) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype StringType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_funcall_value _ =
   assert_equal
     (get_type "a" (typecheck_code "let f x = x + 1 ;; let a = f 4 ;;"))
-    (MonoType TInt) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype IntType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_funcall_infer _ =
   assert_equal
     (get_type "a" (typecheck_code "let f x = x ;; let a = f true ;;"))
-    (MonoType TBool) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype BoolType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_simple_tuple _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = (1, 2) ;;"))
-    (MonoType (TProduct [ TInt; TInt ]))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (TupleType [ IntType; IntType ]))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_multitype_tuple _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = (1, true) ;;"))
-    (MonoType (TProduct [ TInt; TBool ]))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (TupleType [ IntType; BoolType ]))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_long_tuple _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = (1, true, \"a\", ()) ;;"))
-    (MonoType (TProduct [ TInt; TBool; TString; TUnit ]))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (TupleType [ IntType; BoolType; StringType; UnitType ]))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_poly_tuple _ =
   let t1 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let f x = x ;; let a = (f, 4) ;;"))
-    (PolyType (t1, MonoType (TProduct [ TArrow (TVar t1, TVar t1); TInt ])))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Monotype (TupleType [ FunctionType (TypeVariable t1, TypeVariable t1); IntType ])))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_mult_poly_tuple _ =
   let t1 = gen_tidx () in
   let t2 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let f x = x ;; let a = (f, f) ;;"))
-    (PolyType
+    (Polytype
        ( t1,
-         PolyType
+         Polytype
            ( t2,
-             MonoType
-               (TProduct
-                  [ TArrow (TVar t1, TVar t1); TArrow (TVar t2, TVar t2) ]) ) ))
-    ~printer:typ_to_string ~cmp:types_eq
+             Monotype
+               (TupleType
+                  [ FunctionType (TypeVariable t1, TypeVariable t1); FunctionType (TypeVariable t2, TypeVariable t2) ]) ) ))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_simple_match _ =
   assert_equal
     (get_type "a" (typecheck_code "let a = match 1 with | x => true ;;"))
-    (MonoType TBool) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype BoolType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_two_arm_match _ =
   assert_equal
     (get_type "a"
        (typecheck_code "let a = match 1 with | x => true | y => false ;;"))
-    (MonoType TBool) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype BoolType) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_enum_match _ =
   assert_equal
@@ -616,8 +653,8 @@ let test_enum_match _ =
        (typecheck_code
           "type t = | Foo | Bar ;;
            let a (x : t) = match x with | Foo => true | Bar => false ;;"))
-    (MonoType (TArrow (TId "t", TBool)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (UserDeclaredType "t", BoolType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_enum_match_infer _ =
   assert_equal
@@ -625,8 +662,8 @@ let test_enum_match_infer _ =
        (typecheck_code
           "type t = | Foo | Bar ;;
            let a x = match x with | Foo => true | Bar => false ;;"))
-    (MonoType (TArrow (TId "t", TBool)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (UserDeclaredType "t", BoolType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_val_match _ =
   assert_equal
@@ -634,8 +671,8 @@ let test_val_match _ =
        (typecheck_code
           "type t = | Foo of int | Bar of bool ;;
            let a (x : t) = match x with | Foo y => true | Bar z => z ;;"))
-    (MonoType (TArrow (TId "t", TBool)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (UserDeclaredType "t", BoolType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_val_match_infer _ =
   assert_equal
@@ -643,8 +680,8 @@ let test_val_match_infer _ =
        (typecheck_code
           "type t = | Foo of int | Bar of bool ;;
            let a x = match x with | Foo y => true | Bar z => z ;;"))
-    (MonoType (TArrow (TId "t", TBool)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (UserDeclaredType "t", BoolType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_tup_match _ =
   assert_equal
@@ -652,8 +689,8 @@ let test_tup_match _ =
        (typecheck_code
           "type t = | Foo of int * int | Bar of bool * int ;;
            let a (x : t) = match x with | Foo (v, w) => v | Bar (y, z) => z ;;"))
-    (MonoType (TArrow (TId "t", TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (UserDeclaredType "t", IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_tup_match_infer _ =
   assert_equal
@@ -661,8 +698,8 @@ let test_tup_match_infer _ =
        (typecheck_code
           "type t = | Foo of int * int | Bar of bool * int ;;
            let a x = match x with | Foo (x, y) => x | Bar (z, w) => w ;;"))
-    (MonoType (TArrow (TId "t", TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (UserDeclaredType "t", IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_mixed_match _ =
   assert_equal
@@ -670,8 +707,8 @@ let test_mixed_match _ =
        (typecheck_code
           "type t = | Foo | Bar of int | Baz of bool * int ;;
            let a (x : t) = match x with | Foo => 0 | Bar y => y | Baz (z, w) => w ;;"))
-    (MonoType (TArrow (TId "t", TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (UserDeclaredType "t", IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_mixed_match_infer _ =
   assert_equal
@@ -679,23 +716,23 @@ let test_mixed_match_infer _ =
        (typecheck_code
           "type t = | Foo | Bar of int | Baz of bool * int ;;
            let a x = match x with | Foo => 0 | Bar y => y | Baz (z, w) => w ;;"))
-    (MonoType (TArrow (TId "t", TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (UserDeclaredType "t", IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_variadic_match _ =
   let t1 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let a x = match x with | y => y ;;"))
-    (PolyType (t1, MonoType (TArrow (TVar t1, TVar t1))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Monotype (FunctionType (TypeVariable t1, TypeVariable t1))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_match_infer_arm _ =
   assert_equal
     (get_type "a"
        (typecheck_code
           "type t = | Foo | Bar ;; let a x y = match x with | Foo => y | Bar => 0 ;;"))
-    (MonoType (TArrow (TId "t", TArrow (TInt, TInt))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (UserDeclaredType "t", FunctionType (IntType, IntType))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_match_infer_many_arm _ =
   assert_equal
@@ -703,106 +740,106 @@ let test_match_infer_many_arm _ =
        (typecheck_code
           "type t = | Foo | Bar | Baz ;;
            let a x y z = match x with | Foo => y | Bar => 0 | Baz => z ;;"))
-    (MonoType (TArrow (TId "t", TArrow (TInt, TArrow (TInt, TInt)))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (UserDeclaredType "t", FunctionType (IntType, FunctionType (IntType, IntType)))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_match_infer_vars _ =
   assert_equal
     (get_type "a"
        (typecheck_code
           "type t = | Foo | Bar ;; let a x y = match x with | Foo => y | z => z ;;"))
-    (MonoType (TArrow (TId "t", TArrow (TId "t", TId "t"))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (UserDeclaredType "t", FunctionType (UserDeclaredType "t", UserDeclaredType "t"))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_match_infer_val _ =
   assert_equal
     (get_type "a" (typecheck_code "let a x = match x with | y => y + 1 ;;"))
-    (MonoType (TArrow (TInt, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 (* TODO: There are definitely more things to test here *)
 
 let test_curry _ =
   assert_equal
     (get_type "a" (typecheck_code "let f x y = x + y ;; let a = f 1 ;;"))
-    (MonoType (TArrow (TInt, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_generic_curry _ =
   let t1 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let f x y = 0 ;; let a = f 1 ;;"))
-    (PolyType (t1, MonoType (TArrow (TVar t1, TInt))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Monotype (FunctionType (TypeVariable t1, IntType))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_curry_infer _ =
   assert_equal
     (get_type "a" (typecheck_code "let f x y = x = y ;; let a = f 1 ;;"))
-    (MonoType (TArrow (TInt, TBool)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, BoolType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_curry_ret _ =
   let t1 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let f x y : int = 0 ;; let a = f 1 ;;"))
-    (PolyType (t1, MonoType (TArrow (TVar t1, TInt))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Monotype (FunctionType (TypeVariable t1, IntType))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_higher_order _ =
   let t1 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let a f = f 0 ;;"))
-    (PolyType (t1, MonoType (TArrow (TArrow (TInt, TVar t1), TVar t1))))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Polytype (t1, Monotype (FunctionType (FunctionType (IntType, TypeVariable t1), TypeVariable t1))))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_higher_order_ret _ =
   assert_equal
     (get_type "a" (typecheck_code "let a f : bool = f 0 ;;"))
-    (MonoType (TArrow (TArrow (TInt, TBool), TBool)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (FunctionType (IntType, BoolType), BoolType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_higher_order_gen _ =
   let t1 = gen_tidx () in
   let t2 = gen_tidx () in
   assert_equal
     (get_type "a" (typecheck_code "let a f x = f x ;;"))
-    (PolyType
+    (Polytype
        ( t1,
-         PolyType
+         Polytype
            ( t2,
-             MonoType
-               (TArrow (TArrow (TVar t1, TVar t2), TArrow (TVar t1, TVar t2)))
+             Monotype
+               (FunctionType (FunctionType (TypeVariable t1, TypeVariable t2), FunctionType (TypeVariable t1, TypeVariable t2)))
            ) ))
-    ~printer:typ_to_string ~cmp:types_eq
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_enum_variant _ =
   assert_equal
     (get_type "a" (typecheck_code "type t = | Foo ;; let a = Foo ;;"))
-    (MonoType (TId "t")) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (UserDeclaredType "t")) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_val_variant _ =
   assert_equal
     (get_type "a" (typecheck_code "type t = | Foo of int ;; let a = Foo 1 ;;"))
-    (MonoType (TId "t")) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (UserDeclaredType "t")) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_tuple_variant _ =
   assert_equal
     (get_type "a"
        (typecheck_code
           "type t = | Foo of int * bool ;; let a = Foo (1, false) ;;"))
-    (MonoType (TId "t")) ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (UserDeclaredType "t")) ~printer:string_of_tyty ~cmp:types_eq
 
 let test_fun_is_monotype _ =
   let t1 = gen_tidx () in
   assert_equal
     (get_type "a"
        (typecheck_code "let a = (fun f x y => (f x, f y)) (fun x => x) ;;"))
-    (PolyType
+    (Polytype
        ( t1,
-         MonoType
-           (TArrow (TVar t1, TArrow (TVar t1, TProduct [ TVar t1; TVar t1 ])))
+         Monotype
+           (FunctionType (TypeVariable t1, FunctionType (TypeVariable t1, TupleType [ TypeVariable t1; TypeVariable t1 ])))
        ))
-    ~printer:typ_to_string ~cmp:types_eq
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_let_is_polytype _ =
   let t1 = gen_tidx () in
@@ -810,22 +847,22 @@ let test_let_is_polytype _ =
   assert_equal
     (get_type "a"
        (typecheck_code "let a = let f x = x in (fun x y => (f x, f y)) ;;"))
-    (PolyType
+    (Polytype
        ( t1,
-         PolyType
+         Polytype
            ( t2,
-             MonoType
-               (TArrow (TVar t1, TArrow (TVar t2, TProduct [ TVar t1; TVar t2 ])))
+             Monotype
+               (FunctionType (TypeVariable t1, FunctionType (TypeVariable t2, TupleType [ TypeVariable t1; TypeVariable t2 ])))
            ) ))
-    ~printer:typ_to_string ~cmp:types_eq
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_fibonacci _ =
   assert_equal
     (get_type "fib"
        (typecheck_code
           "let rec fib n = if n = 0 || n = 1 then 1 else fib (n - 1) + fib (n - 2) ;;"))
-    (MonoType (TArrow (TInt, TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (IntType, IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let test_list_len _ =
   assert_equal
@@ -833,8 +870,8 @@ let test_list_len _ =
        (typecheck_code
           "type list = | Nil | Val of int * list ;;
            let rec len x = match x with | Nil => 0 | Val (_, r) => 1 + len r ;;"))
-    (MonoType (TArrow (TId "list", TInt)))
-    ~printer:typ_to_string ~cmp:types_eq
+    (Monotype (FunctionType (UserDeclaredType "list", IntType)))
+    ~printer:string_of_tyty ~cmp:types_eq
 
 let typecheck_tests =
   "test suite for type checker "
