@@ -914,7 +914,7 @@ let typecheck_tests =
          "int binop functions" >:: test_int_binop_fns;
          "comparison binary operations" >:: test_cmp_binops;
          "comparison binop functions" >:: test_lt_fn;
-         (* "equals as a function" >:: test_eq_fn; *) (* I limit = to int *)
+         "equals as a function" >:: test_eq_fn;
          "string concatenation" >:: test_str_concat;
          "concatenation as a function" >:: test_str_concat_fn;
          "logical binary operations" >:: test_logical_binops;
