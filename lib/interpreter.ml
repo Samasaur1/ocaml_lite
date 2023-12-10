@@ -12,6 +12,22 @@ type value =
   | BuiltinValue of (value -> value)
 and environment = (string * value) list
 
+let rec string_of_value (v: value): string =
+  match v with
+  | IntLiteral i -> string_of_int i
+  | StringLiteral s -> "\"" ^ s ^ "\""
+  | BoolLiteral b -> string_of_bool b
+  | UnitValue -> "()"
+  | TupleValue lst -> "(" ^ (List.map string_of_value lst |> String.concat ", ") ^ ")"
+  | ClosureValue (params, env, body, rec_name) -> "<closure>"
+  | UserValue (c, pl) -> (match pl with
+    | [] -> c
+    | [v] -> c ^ " " ^ string_of_value v
+    | _ -> c ^ " (" ^ (List.map string_of_value pl |> String.concat ", ") ^ ")"
+  )
+  | ConstructorValue c -> c
+  | BuiltinValue _ -> "<builtin>"
+
 let rec interpret (p: program): environment =
   let Program(bds) = p in
 
@@ -128,7 +144,11 @@ and interpret_expr (env: environment) (e: expr): value =
       | UserValue (constructor, value_list) -> (
         let mapped_branches = List.map (fun b -> let MatchBranch (cons, plo, rhs) = b in (cons, (plo, rhs))) branches in
         let (pattern_vars_option, rhs) = match List.assoc_opt constructor mapped_branches with
-          | None -> failwith "No matching match branch"
+          | None ->
+            (* fails here in some specific match expressions in lc_parser.ol - i suspect a variable shadowing issue *)
+            let _ = print_endline (List.map (fun x -> let (nm, vl) = x in nm ^ ": " ^ string_of_value vl) env |> String.concat "\n  ") in
+let _ = print_endline constructor in let _ = print_endline (List.map (fun x -> let (name, (pvs, y)) = x in name ^ ": " ^ string_of_expr y) mapped_branches |> String.concat " ") in
+            failwith "No matching match branch"
           | Some (pvs', rhs) -> (pvs', rhs)
         in
         match (pattern_vars_option, value_list) with
