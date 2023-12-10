@@ -256,33 +256,42 @@ and generalize (ctx: context) (target: typ): typ =
   let _ = print_endline ("Exiting generalize on " ^ string_of_typ target ^ " with " ^ string_of_typ result)  in
   result
 and generalize' (ctx: context) (target: typ): typ =
-  let rec extract_type_vars (t: typ): typ * int list =
+  let rec extract_type_vars (t: typ): typ * int list * int list =
+    let _ = print_endline ("Calling extract_type_vars on " ^ string_of_typ t) in
+    let (new_ty, force_override, tvs) = extract_type_vars' t in
+    let _ = print_endline ("Exiting extract_type_vars on " ^ string_of_typ t ^ " with new type " ^ string_of_typ new_ty ^ " forced vars: " ^ (List.map string_of_int force_override |> String.concat " ") ^ " tvs: " ^ (List.map string_of_int tvs |> String.concat " ")) in
+    (new_ty, force_override, tvs)
+  and extract_type_vars' (t: typ): typ * int list * int list =
     match t with
     | FunctionType (l, r) ->
-      let (lt, ltvs) = extract_type_vars l in
-      let (rt, rtvs) = extract_type_vars r in
-      (FunctionType (lt, rt), ltvs @ rtvs)
+      let (lt, f1, ltvs) = extract_type_vars l in
+      let (rt, f2, rtvs) = extract_type_vars r in
+      (FunctionType (lt, rt), f1 @ f2, ltvs @ rtvs)
     (* | TupleType lst -> let (acc, blist) = List.fold_left_map (fun (acc, a) -> let (t', tvs) = extract_type_vars a in (acc @ tvs, t')) [] lst in (TupleType blist, acc) *)
     | TupleType lst ->
-      let tvs = List.concat_map (fun x -> let (_, tv) = extract_type_vars x in tv) lst in
-      let lst' = List.map (fun x -> let (t', _) = extract_type_vars x in t') lst in
-      (TupleType lst', tvs)
-    | IntType -> (IntType, [])
-    | BoolType -> (BoolType, [])
-    | StringType -> (StringType, [])
-    | UnitType -> (UnitType, [])
-    | UserDeclaredType _ -> (t, [])
-    | TypeVariable i -> (t, [i])
-    | Polytype (i, t') -> let (t'', tvs) = extract_type_vars t' in (t'', tvs)
+      let tvs = List.concat_map (fun x -> let (_, _, tv) = extract_type_vars x in tv) lst in
+      let forced = List.concat_map (fun x -> let (_, f, _) = extract_type_vars x in f) lst in
+      let lst' = List.map (fun x -> let (t', _, _) = extract_type_vars x in t') lst in
+      (TupleType lst', forced, tvs)
+    | IntType -> (IntType, [], [])
+    | BoolType -> (BoolType, [], [])
+    | StringType -> (StringType, [], [])
+    | UnitType -> (UnitType, [], [])
+    | UserDeclaredType _ -> (t, [], [])
+    | TypeVariable i -> (t, [], [i])
+    | Polytype (i, t') -> let (t'', forced, tvs) = extract_type_vars t' in (t'', i :: forced, tvs)
   in
-    let (target', tvs) = extract_type_vars target in
-    let _ = print_endline (List.map string_of_int tvs |> String.concat " ") in
-      let preexisting_tvs = List.concat_map (fun x -> let (name, type') = x in let (_, tvs) = extract_type_vars type' in tvs) ctx in
-    let _ = print_endline (List.map string_of_int preexisting_tvs |> String.concat " ") in
-        let final_tvs = List.fold_left (fun acc a -> List.filter (fun x -> x <> a) acc) tvs preexisting_tvs in
-    let _ = print_endline (List.map string_of_int final_tvs |> String.concat " ") in
-          let ftvs = List.sort_uniq compare final_tvs in
-            List.fold_left (fun acc a -> Polytype (a, acc)) target' ftvs
+    let (target', force_override_polytypes, tvs) = extract_type_vars target in
+    let _ = print_endline ("tvs: " ^ (List.map string_of_int tvs |> String.concat " ")) in
+    let _ = print_endline ("forced: " ^ (List.map string_of_int force_override_polytypes |> String.concat " ")) in
+      let preexisting_tvs = List.concat_map (fun x -> let (name, type') = x in let (_, _, tvs) = extract_type_vars type' in tvs) ctx in
+    let _ = print_endline ("preexisting: " ^ (List.map string_of_int preexisting_tvs |> String.concat " ")) in
+        let final_tvs' = List.fold_left (fun acc a -> List.filter (fun x -> x <> a) acc) tvs preexisting_tvs in
+    let _ = print_endline ("final (pre-override): " ^ (List.map string_of_int final_tvs' |> String.concat " ")) in
+          let final_tvs = force_override_polytypes @ final_tvs' in
+    let _ = print_endline ("final (real): " ^ (List.map string_of_int final_tvs |> String.concat " ")) in
+            let ftvs = List.sort_uniq compare final_tvs in
+              List.fold_left (fun acc a -> Polytype (a, acc)) target' ftvs
 (* and generalize (type_vars: int list) (target: typ): tyty = *)
 (*   match type_vars with *)
 (*   | [] -> Monotype target *)
