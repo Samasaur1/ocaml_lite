@@ -1,6 +1,7 @@
-let parse = fun _ -> failwith "parse is undefined"
-let typecheck = fun _ -> failwith "typecheck is undefined"
-let interpret = fun _-> failwith "interpret is undefined"
+let tokenize = Ocaml_lite.Lexer.tokenize
+let parse = Ocaml_lite.Parser.parse
+let typecheck = Ocaml_lite.Typechecker.typecheck
+let interpret = Ocaml_lite.Interpreter.interpret
 
 let () =
   if Array.length Sys.argv <> 2
@@ -9,6 +10,7 @@ let () =
     let ch = In_channel.open_text Sys.argv.(1) in
     let text = In_channel.input_all ch in
     let () = In_channel.close ch in
-    let ast = parse text in
+    let token_list = tokenize text in
+    let ast = parse token_list in
     let _ = typecheck ast in
-    interpret ast
+    let _ = interpret ast in ()
