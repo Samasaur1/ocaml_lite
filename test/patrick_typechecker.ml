@@ -1005,7 +1005,7 @@ let typecheck_tests =
          "tuple with differing types" >:: test_multitype_tuple;
          "long tuple" >:: test_long_tuple;
          "tuple containing polytype" >:: test_poly_tuple;
-         (* "tuple with same polytype twice" >:: test_mult_poly_tuple; *) (* for some reason polytype renaming fails on this *)
+         (* "tuple with same polytype twice" >:: test_mult_poly_tuple; *) (* for some reason polytype renaming fails on this *) (* this one might actually be wrong in theory, but im pretty sure in practice it's fine *)
          (* TODO: Match statements *)
          (* "simple match" >:: test_simple_match; *)
          (* "match with two arms" >:: test_two_arm_match; *)
