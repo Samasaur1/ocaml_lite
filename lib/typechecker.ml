@@ -127,7 +127,7 @@ and typecheck_expr' (ctx: context) (e: expr): (typ * (tyty * tyty) list) =
       | Divide -> (IntType, ([(l_ty, IntType); (l_ty, r_ty)] |> monotonize) @ c1 @ c2)
       | Modulo -> (IntType, ([(l_ty, IntType); (l_ty, r_ty)] |> monotonize) @ c1 @ c2)
       | LessThan -> (BoolType, ([(l_ty, IntType); (l_ty, r_ty)] |> monotonize) @ c1 @ c2)
-      | Equal -> (BoolType, ([(l_ty, IntType); (l_ty, r_ty)] |> monotonize) @ c1 @ c2)
+      | Equal -> (BoolType, ([(l_ty, r_ty)] |> monotonize) @ c1 @ c2)
       | Concat -> (StringType, ([(l_ty, StringType); (l_ty, r_ty)] |> monotonize) @ c1 @ c2)
       | And -> (BoolType, ([(l_ty, BoolType); (l_ty, r_ty)] |> monotonize) @ c1 @ c2)
       | Or -> (BoolType, ([(l_ty, BoolType); (l_ty, r_ty)] |> monotonize) @ c1 @ c2))
