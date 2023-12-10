@@ -18,7 +18,31 @@ let assert_equal ?printer ?cmp ?msg real expected =
   | (None, Some c, Some m) -> assert_equal expected real ~cmp:c ~msg:m
   | (Some p, Some c, Some m) -> assert_equal expected real ~printer:p ~cmp:c ~msg:m
 
-let typecheck_code (s : string) : context = typecheck (parse (tokenize s))
+type tyty =
+  | Monotype of typ
+  | Polytype of int * tyty
+
+let rec tyty_of_typ (t: typ): tyty =
+  match t with
+  | FunctionType _ -> Monotype t
+  | TupleType _ -> Monotype t
+  | IntType -> Monotype t
+  | BoolType -> Monotype t
+  | StringType -> Monotype t
+  | UnitType -> Monotype t
+  | UserDeclaredType _ -> Monotype t
+  | TypeVariable _ -> Monotype t
+  | Polytype (i, t') -> Polytype (i, tyty_of_typ t')
+let typecheck_code' (s : string) : context = typecheck (parse (tokenize s))
+let typecheck_code (s: string): (string * tyty) list =
+  let ctx = typecheck_code' s in
+  List.map
+    (fun (s, t) -> (s, tyty_of_typ t))
+      ctx
+let rec string_of_tyty (t: tyty): string =
+  match t with
+  | Monotype t' -> string_of_typ t'
+  | Polytype (i, t') -> "forall t" ^ string_of_int i ^ ". (" ^ string_of_tyty t' ^ ")"
 
 (* compat shims *)
 let get_type = List.assoc
