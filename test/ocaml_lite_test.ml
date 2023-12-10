@@ -6,6 +6,7 @@ let tests = "test suite for ocaml_lite" >::: [
     Typechecker.typechecker_tests;
     (* Interpreter.interpreter_tests; *)
     Patrick_parser.parse_tests;
+    Patrick_typechecker.typecheck_tests;
   ]
 
 let _ = run_test_tt_main tests

@@ -57,17 +57,25 @@ and typecheck_binding (ctx: context) (b: binding): context =
                 let generalized = generalize ctx substituted in
                   (name, generalized) :: ctx
   | RecursiveBinding (name, params, ty, value) ->
-      let param_ctx' = List.map (fun p -> match p with | UntypedParam x -> (x, Monotype (next_type_var ())) | TypedParam (x, t) -> (x, Monotype t)) params in
-        let param_ctx = (name, Monotype (next_type_var ())) :: param_ctx' in
-          let (value_ty, constraints') = typecheck_expr (param_ctx @ ctx) value in
-            let value_type = List.fold_right (fun a acc -> FunctionType (a, acc)) (List.map (fun x -> let (_, Monotype t) = x in t) param_ctx) value_ty in
-              let substitutions = unify_constraints ((match ty with | None -> [] | Some t -> [(Monotype t, Monotype value_ty)]) @ constraints') in
+      let param_ctx' = List.map (fun p -> match p with | UntypedParam x -> (x, Monotype (next_type_var ())) | TypedParam (x, t) -> (x, Monotype t)) params in (* (name, tyty) list - does not include self *)
+    let this_binding_type_var = next_type_var () in
+        let param_ctx = (name, Monotype (this_binding_type_var)) :: param_ctx' in (* add this function itself to the "parameters" *)
+          let (value_ty, constraints') = typecheck_expr (param_ctx @ ctx) value in (* type of value of this binding (right side of =) *)
+                                                                                  (* MUST be param_ctx' below so that we don't include the binding itself as a parameter *)
+            let value_type = List.fold_right (fun a acc -> FunctionType (a, acc)) (List.map (fun x -> let (_, Monotype t) = x in t) param_ctx') value_ty in (* type of binding as a whole (either t or function to t) *)
+    let other_constraints = (match ty with | None -> [] | Some t -> [(Monotype t, Monotype value_ty)]) @ [(Monotype this_binding_type_var, Monotype value_type)] in
+              let substitutions = unify_constraints (other_constraints @ constraints') in
                 let substituted = apply_substitutions substitutions value_type in
                   let generalized = generalize ctx substituted in
                     (name, generalized) :: ctx
   | TypeDefBinding (name, constructors) ->
       (List.map (fun (c, args) -> match args with | None -> (c, Monotype (UserDeclaredType name)) | Some(t) -> (c, Monotype (FunctionType (t, UserDeclaredType name)))) constructors) @ ctx
 and typecheck_expr (ctx: context) (e: expr): (typ * (tyty * tyty) list) =
+  let _ = print_endline ("Calling typecheck_expr on `" ^ string_of_expr e ^ "` with context:\n  " ^ (List.map (fun x -> let (name, ty) = x in name ^ ": " ^ string_of_tyty ty) ctx |> String.concat "\n  ")) in
+  let (t, constraints) = typecheck_expr' ctx e in
+let _ = print_endline ("Exiting typecheck_expr on `" ^ string_of_expr e ^ "` (: " ^ string_of_typ t ^ ") with constraints:\n  " ^ (List.map (fun x -> let (l, r) = x in string_of_tyty l ^ " ~ " ^ string_of_tyty r) constraints |> String.concat "\n  ")) in
+  (t, constraints)
+and typecheck_expr' (ctx: context) (e: expr): (typ * (tyty * tyty) list) =
   match e with
   | LetExpr (name, params, ty, value, body) ->
     (match params with
@@ -86,10 +94,13 @@ and typecheck_expr (ctx: context) (e: expr): (typ * (tyty * tyty) list) =
     )
   | LetRecExpr (name, params, ty, value, body) ->
       let param_ctx' = List.map (fun p -> match p with | UntypedParam x -> (x, Monotype (next_type_var ())) | TypedParam (x, t) -> (x, Monotype t)) params in
-        let param_ctx = (name, Monotype (next_type_var ())) :: param_ctx' in
+    let this_binding_type_var = next_type_var () in
+        let param_ctx = (name, Monotype (this_binding_type_var)) :: param_ctx' in
           let (value_ty, constraints') = typecheck_expr (param_ctx @ ctx) value in
-            let value_type = List.fold_right (fun a acc -> FunctionType (a, acc)) (List.map (fun x -> let (_, Monotype t) = x in t) param_ctx) value_ty in
-              let substitutions = unify_constraints ((match ty with | None -> [] | Some t -> [(Monotype t, Monotype value_ty)]) @ constraints') in
+                                                                                  (* MUST be param_ctx' below so that we don't include the binding itself as a parameter *)
+            let value_type = List.fold_right (fun a acc -> FunctionType (a, acc)) (List.map (fun x -> let (_, Monotype t) = x in t) param_ctx') value_ty in
+    let other_constraints = (match ty with | None -> [] | Some t -> [(Monotype t, Monotype value_ty)]) @ [(Monotype this_binding_type_var, Monotype value_type)] in
+              let substitutions = unify_constraints (other_constraints @ constraints') in
                 let substituted = apply_substitutions substitutions value_type in
                   let generalized = generalize ctx substituted in
                     typecheck_expr ((name, generalized) :: ctx) body
@@ -116,7 +127,7 @@ and typecheck_expr (ctx: context) (e: expr): (typ * (tyty * tyty) list) =
       | Divide -> (IntType, ([(l_ty, IntType); (l_ty, r_ty)] |> monotonize) @ c1 @ c2)
       | Modulo -> (IntType, ([(l_ty, IntType); (l_ty, r_ty)] |> monotonize) @ c1 @ c2)
       | LessThan -> (BoolType, ([(l_ty, IntType); (l_ty, r_ty)] |> monotonize) @ c1 @ c2)
-      | Equal -> (BoolType, ([(l_ty, IntType); (l_ty, r_ty)] |> monotonize) @ c1 @ c2)
+      | Equal -> (BoolType, ([(l_ty, r_ty)] |> monotonize) @ c1 @ c2)
       | Concat -> (StringType, ([(l_ty, StringType); (l_ty, r_ty)] |> monotonize) @ c1 @ c2)
       | And -> (BoolType, ([(l_ty, BoolType); (l_ty, r_ty)] |> monotonize) @ c1 @ c2)
       | Or -> (BoolType, ([(l_ty, BoolType); (l_ty, r_ty)] |> monotonize) @ c1 @ c2))
@@ -167,6 +178,15 @@ and typecheck_expr (ctx: context) (e: expr): (typ * (tyty * tyty) list) =
     in
       (output_ty, checked_branches @ constraints)
 and unify_constraints (constraints: (tyty * tyty) list): (int * typ) list =
+(*   let _ = print_endline ("Calling typecheck_expr on `" ^ string_of_expr e ^ "` with context:\n  " ^ (List.map (fun x -> let (name, ty) = x in name ^ ": " ^ string_of_tyty ty) ctx |> String.concat "\n  ")) in *)
+(*   let (t, constraints) = typecheck_expr' ctx e in *)
+(* let _ = print_endline ("Exiting typecheck_expr on `" ^ string_of_expr e ^ "` (: " ^ string_of_typ t ^ ") with constraints:\n  " ^ (List.map (fun x -> let (l, r) = x in string_of_tyty l ^ " ~ " ^ string_of_tyty r) constraints |> String.concat "\n  ")) in *)
+(*   (t, constraints) *)
+let _ = print_endline ("Calling unify_constraints with constraints\n  " ^ (List.map (fun x -> let (l, r) = x in string_of_tyty l ^ " ~ " ^ string_of_tyty r) constraints |> String.concat "\n  ")) in
+let substitutions = unify_constraints' constraints in
+let _ = print_endline ("Exiting unify_constraints with substitutions\n  " ^ (List.map (fun x -> let (l, r) = x in "t" ^ string_of_int l ^ " > " ^ string_of_typ r) substitutions |> String.concat "\n  ")) in
+  substitutions
+and unify_constraints' (constraints: (tyty * tyty) list): (int * typ) list =
   let rec recursive_replace (i: int) (t: typ) (target: typ): typ =
     match target with
     | FunctionType (l, r) -> FunctionType (recursive_replace i t l, recursive_replace i t r)
