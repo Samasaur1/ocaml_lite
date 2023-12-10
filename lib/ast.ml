@@ -54,6 +54,7 @@ and typ =
   | StringType
   | UnitType
   | UserDeclaredType of string
+  | TypeVariable of int
 
 and match_branch =
   | MatchBranch of string * pattern_vars option * expr
@@ -77,6 +78,7 @@ let rec string_of_typ (t: typ): string =
   | StringType -> "string"
   | UnitType -> "unit"
   | UserDeclaredType x -> x
+  | TypeVariable i -> "t" ^ string_of_int i
 
 let rec string_of_program (indent: int) (p: program): string =
   match p with
@@ -84,9 +86,9 @@ let rec string_of_program (indent: int) (p: program): string =
 and string_of_binding (indent: int) (bd: binding): string =
   match bd with
   | NonRecursiveBinding (name, params, ty, value) ->
-      (repeat indent " ") ^ "let " ^ name ^ " " ^ ((List.map string_of_param params) |> (String.concat " ")) ^ " = " ^ string_of_expr value ^ ";;"
+      (repeat indent " ") ^ "let " ^ name ^ " " ^ ((List.map string_of_param params) |> (String.concat " ")) ^ ": <type> = " ^ string_of_expr value ^ ";;"
   | RecursiveBinding (name, params, ty, value) ->
-      (repeat indent " ") ^ "let rec " ^ name ^ " " ^ ((List.map string_of_param params) |> (String.concat " ")) ^ " = " ^ string_of_expr value ^ ";;"
+      (repeat indent " ") ^ "let rec " ^ name ^ " " ^ ((List.map string_of_param params) |> (String.concat " ")) ^ ": <type> = " ^ string_of_expr value ^ ";;"
   | TypeDefBinding (name, constructors) ->
       (repeat indent " ") ^ "type " ^ name ^ " = " ^ ((List.map (function | (s, None) -> "| " ^ s | (s, Some t) -> "| " ^ s ^ " of " ^ string_of_typ t) constructors) |> (String.concat " ")) ^ ";;"
 and string_of_param (p: param): string =
@@ -95,10 +97,10 @@ and string_of_param (p: param): string =
   | TypedParam (x, t) -> "(" ^ x ^ ": " ^ string_of_typ t ^ ")"
 and string_of_expr (e: expr): string =
   match e with
-  | LetExpr (name', params', type', value', in') -> "letexpr"
-  | LetRecExpr (name', params', type', value', in') -> "letexpr"
+  | LetExpr (name', params', type', value', in') -> "let " ^ name' ^ " " ^ ((List.map string_of_param params') |> String.concat " ") ^ ": <type> = " ^ string_of_expr value' ^ " in " ^ string_of_expr in'
+  | LetRecExpr (name', params', type', value', in') -> "let rec " ^ name' ^ " " ^ ((List.map string_of_param params') |> String.concat " ") ^ ": <type> = " ^ string_of_expr value' ^ " in " ^ string_of_expr in'
   | IfExpr (c, t, f) -> "if " ^ string_of_expr c ^ " then " ^ string_of_expr t ^ " else " ^ string_of_expr f
-  | FunDefExpr (params, ty, body) -> "fun " ^ (List.map string_of_param params |> String.concat ", ") ^ ": type => " ^ string_of_expr body
+  | FunDefExpr (params, ty, body) -> "fun " ^ (List.map string_of_param params |> String.concat ", ") ^ ": <type> => " ^ string_of_expr body
   | FunAppExpr (fn, arg) -> "(" ^ string_of_expr fn ^ ") (" ^ string_of_expr arg ^ ")"
   | TupleExpr (members) -> "(" ^ (List.map string_of_expr members |> String.concat ", ") ^ ")"
   | BinopExpr (l, op, r) -> "(" ^ string_of_expr l ^ ") op (" ^ string_of_expr r ^ ")"
